@@ -1250,9 +1250,27 @@ export function DashboardView({
               {Math.round((totalCarbs / TARGET_CARBS) * 100)}% พลังงานหลัก
             </p>
             <p className="text-[11px] text-amber-300/90 mt-1">
-              {totalCarbs < TARGET_CARBS
-                ? `🍚 กินข้าวสวยเพิ่มอีก ~${Math.round((TARGET_CARBS - totalCarbs) / 0.28)} กรัม เพื่อให้ครบ ${TARGET_CARBS} g`
-                : `✅ ครบเป้าคาร์บ ${TARGET_CARBS} g แล้ว`}
+              {(() => {
+                const remainingCarbs = Math.max(0, TARGET_CARBS - totalCarbs)
+                if (remainingCarbs <= 0) {
+                  return `✅ ครบเป้าคาร์บ ${TARGET_CARBS} g แล้ว`
+                }
+                const remainingCalories = Math.max(0, TARGET_CALORIES - totalCalories)
+                const remainingProtein = Math.max(0, TARGET_PROTEIN - totalProtein)
+                const proteinReserveKcal = remainingProtein * 4
+                const availableKcalForRice = Math.max(0, remainingCalories - proteinReserveKcal)
+                const riceForCarbs = remainingCarbs / 0.28
+                const maxRiceByCalories = availableKcalForRice / 1.3
+                const recommendedRice = Math.round(Math.min(riceForCarbs, maxRiceByCalories))
+
+                if (recommendedRice <= 0) {
+                  return `⚠️ เก็บแคลที่เหลือ (${Math.round(remainingCalories)} kcal) ไว้ให้โปรตีนอีก ${remainingProtein.toFixed(0)} g`
+                }
+                const isCappedByCalories = maxRiceByCalories < riceForCarbs
+                return isCappedByCalories
+                  ? `🍚 กินข้าวสวยได้อีก ~${recommendedRice} กรัม (เผื่อแคลให้โปรตีน ${remainingProtein.toFixed(0)} g แล้ว)`
+                  : `🍚 กินข้าวสวยเพิ่มอีก ~${recommendedRice} กรัม เพื่อให้ครบ ${TARGET_CARBS} g (เผื่อโปรตีนแล้ว)`
+              })()}
             </p>
           </CardContent>
         </Card>
