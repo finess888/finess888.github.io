@@ -1249,6 +1249,11 @@ export function DashboardView({
             <p className="text-xs text-slate-400 mt-2">
               {Math.round((totalCarbs / TARGET_CARBS) * 100)}% พลังงานหลัก
             </p>
+            <p className="text-[11px] text-amber-300/90 mt-1">
+              {totalCarbs < TARGET_CARBS
+                ? `🍚 กินข้าวสวยเพิ่มอีก ~${Math.round((TARGET_CARBS - totalCarbs) / 0.28)} กรัม เพื่อให้ครบ ${TARGET_CARBS} g`
+                : `✅ ครบเป้าคาร์บ ${TARGET_CARBS} g แล้ว`}
+            </p>
           </CardContent>
         </Card>
 
