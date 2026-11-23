@@ -401,16 +401,15 @@ export function DashboardView({
     ],
   }
 
-  // Weekly Intake Bar Chart
+  // 30-Day Intake Bar Chart
   const last7Days: string[] = []
   const last7DaysLabels: string[] = []
-  for (let i = 6; i >= 0; i--) {
+  for (let i = 29; i >= 0; i--) {
     const d = new Date()
     d.setDate(d.getDate() - i)
     const iso = d.toLocaleDateString("en-CA")
     last7Days.push(iso)
-    const dayNames = ["อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส."]
-    last7DaysLabels.push(`${dayNames[d.getDay()]} (${d.getDate()})`)
+    last7DaysLabels.push(`${d.getDate()}/${d.getMonth() + 1}`)
   }
 
   const weeklyMaleCalories = last7Days.map((isoDate) => {
@@ -424,6 +423,19 @@ export function DashboardView({
       .filter((m) => (m.person === "ฝ่ายหญิง" || m.person === "ทั้งคู่") && String(m.date || m.Date || "").split("T")[0] === isoDate)
       .reduce((sum, m) => sum + Number(m.calories || m.Calories || 0), 0)
   })
+
+  // 30-Day Target Adherence %
+  const active30DayValues = isAll
+    ? weeklyMaleCalories.map((m, idx) => m + weeklyFemaleCalories[idx])
+    : isMale
+      ? weeklyMaleCalories
+      : weeklyFemaleCalories
+  const last30LoggedDays = active30DayValues.filter((cal) => cal > 0).length
+  const last30OnTargetDays = active30DayValues.filter(
+    (cal) => cal > 0 && TARGET_CALORIES > 0 && cal <= TARGET_CALORIES
+  ).length
+  const last30AdherencePct =
+    last30LoggedDays > 0 ? Math.round((last30OnTargetDays / last30LoggedDays) * 100) : 0
 
   const getBarColors = (values: number[], targetKcal: number, maintenanceKcal: number) => {
     const bg: string[] = []
@@ -1552,16 +1564,30 @@ export function DashboardView({
           </CardContent>
         </Card>
 
-        {/* Weekly Trend Bar Chart */}
+        {/* 30-Day Trend Bar Chart */}
         <Card className="lg:col-span-2 bg-[#151d2f] border-[#26334d]">
-          <CardHeader className="flex flex-row items-center justify-between">
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
-              <CardTitle className="text-base font-semibold text-white">แคลอรี่ 7 วันล่าสุด ({selectedPerson})</CardTitle>
-              <CardDescription className="text-slate-400 text-xs">
-                แนวโน้มการรับประทานอาหารเปรียบเทียบเป้าหมาย {TARGET_CALORIES} kcal
+              <CardTitle className="text-base font-semibold text-white flex items-center gap-2 flex-wrap">
+                <span>แคลอรี่ 30 วันล่าสุด ({selectedPerson})</span>
+                <Badge
+                  variant="outline"
+                  className={
+                    last30AdherencePct >= 70
+                      ? "border-emerald-500/40 text-emerald-300 bg-emerald-500/15"
+                      : last30AdherencePct >= 40
+                        ? "border-amber-500/40 text-amber-300 bg-amber-500/15"
+                        : "border-rose-500/40 text-rose-300 bg-rose-500/15"
+                  }
+                >
+                  ทำตามเป้า {last30AdherencePct}% ({last30OnTargetDays}/{last30LoggedDays} วัน)
+                </Badge>
+              </CardTitle>
+              <CardDescription className="text-slate-400 text-xs mt-0.5">
+                แนวโน้มการรับประทานอาหาร 30 วันล่าสุด เปรียบเทียบเป้าหมาย {TARGET_CALORIES.toLocaleString()} kcal
               </CardDescription>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Badge variant="outline" className="border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
                 นน. ล่าสุด: {currentWeight} kg (เป้า {ULTIMATE_TARGET_WEIGHT} kg)
               </Badge>
@@ -1591,7 +1617,7 @@ export function DashboardView({
                   },
                   x: {
                     grid: { display: false },
-                    ticks: { color: "#94a3b8" },
+                    ticks: { color: "#94a3b8", font: { size: 10 }, maxRotation: 45, autoSkip: true },
                   },
                 },
                 plugins: {
