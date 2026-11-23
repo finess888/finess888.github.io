@@ -1342,18 +1342,26 @@ export function DashboardView({
             </div>
           </div>
 
-          {/* Stacked 3-segment progress bar */}
+          {/* Stacked 3-segment progress bar (scaled against daily target kcal) */}
           <div className="h-2.5 w-full rounded-full bg-slate-800 overflow-hidden flex">
-            {groupedActiveMeals.map((g) =>
-              g.percent > 0 ? (
-                <div
-                  key={g.group.id}
-                  style={{ width: `${g.percent}%` }}
-                  className={`h-full ${g.group.barClass} transition-all duration-300`}
-                  title={`${g.group.label}: ${g.calories} kcal (${g.percent}%)`}
-                />
-              ) : null
-            )}
+            {(() => {
+              const targetTotal =
+                foodGroupTargets.protein.calories +
+                foodGroupTargets.rice.calories +
+                foodGroupTargets.snack.calories
+              const denominator = Math.max(targetTotal, totalCalories, 1)
+              return groupedActiveMeals.map((g) => {
+                const widthPct = (g.calories / denominator) * 100
+                return widthPct > 0 ? (
+                  <div
+                    key={g.group.id}
+                    style={{ width: `${widthPct}%` }}
+                    className={`h-full ${g.group.barClass} transition-all duration-300`}
+                    title={`${g.group.label}: ${g.calories} kcal (${Math.round((g.calories / Math.max(targetTotal, 1)) * 100)}% ของเป้าวัน)`}
+                  />
+                ) : null
+              })
+            })()}
           </div>
 
           {/* 3 Summary Cards */}
