@@ -123,7 +123,6 @@ const SNACK_DRINK_KEYWORDS = [
   "ลูกชิ้น",
   "นักเก็ต",
   "เฟรนช์ฟราย",
-  "กล้วย",
   "แอปเปิ้ล",
   "ส้ม",
   "แตงโม",
@@ -170,6 +169,7 @@ const SNACK_DRINK_KEYWORDS = [
 ]
 
 const MEAT_PROTEIN_KEYWORDS = [
+  "กล้วย",
   "หมู",
   "สันคอ",
   "สันใน",
