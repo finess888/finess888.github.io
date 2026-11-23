@@ -1156,10 +1156,13 @@ export function DashboardView({
         </CardContent>
       </Card>
 
-      {/* Metric Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {/* Calories Card */}
-        <Card className="bg-[#151d2f] border-[#26334d] hover:border-emerald-500/40 transition-colors">
+      {/* Unified Daily Metrics + 3-Category Food Group Summary */}
+      <Card className="bg-[#151d2f] border-[#26334d]">
+        <CardContent className="p-4 space-y-4">
+          {/* Metric Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {/* Calories Card */}
+            <Card className="bg-[#0b0f19]/70 border-[#26334d] hover:border-emerald-500/40 transition-colors">
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
             <div>
               <CardTitle className="text-xs font-semibold text-white flex items-center gap-1">
@@ -1219,7 +1222,7 @@ export function DashboardView({
         </Card>
 
         {/* Protein Card */}
-        <Card className="bg-[#151d2f] border-[#26334d] hover:border-emerald-500/40 transition-colors">
+        <Card className="bg-[#0b0f19]/70 border-[#26334d] hover:border-emerald-500/40 transition-colors">
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
             <CardTitle className="text-xs font-medium text-slate-400">โปรตีน (Protein)</CardTitle>
             <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400">
@@ -1241,7 +1244,7 @@ export function DashboardView({
         </Card>
 
         {/* Carbs Card */}
-        <Card className="bg-[#151d2f] border-[#26334d] hover:border-amber-500/40 transition-colors">
+        <Card className="bg-[#0b0f19]/70 border-[#26334d] hover:border-amber-500/40 transition-colors">
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
             <CardTitle className="text-xs font-medium text-slate-400">คาร์โบไฮเดรต (Carbs)</CardTitle>
             <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400">
@@ -1286,7 +1289,7 @@ export function DashboardView({
         </Card>
 
         {/* Fat Card */}
-        <Card className="bg-[#151d2f] border-[#26334d] hover:border-rose-500/40 transition-colors">
+        <Card className="bg-[#0b0f19]/70 border-[#26334d] hover:border-rose-500/40 transition-colors">
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
             <CardTitle className="text-xs font-medium text-slate-400">ไขมันดี (Good Fat)</CardTitle>
             <div className="p-2 rounded-xl bg-rose-500/10 text-rose-400">
@@ -1308,9 +1311,8 @@ export function DashboardView({
         </Card>
       </div>
 
-      {/* 3-Category Food Group Proportion Summary (combined with Daily KPIs) */}
-      <Card className="bg-[#151d2f] border-[#26334d] -mt-2">
-        <CardContent className="p-4 space-y-3">
+      {/* 3-Category Food Group Proportion Summary (inside same unified card) */}
+      <div className="pt-4 border-t border-[#26334d] space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="text-sm font-semibold text-white flex items-center gap-2">
               <UtensilsCrossed className="h-4 w-4 text-indigo-400" />
@@ -1428,6 +1430,7 @@ export function DashboardView({
                 </div>
               )
             })}
+          </div>
           </div>
         </CardContent>
       </Card>
