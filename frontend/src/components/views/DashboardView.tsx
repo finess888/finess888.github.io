@@ -425,6 +425,27 @@ export function DashboardView({
       .reduce((sum, m) => sum + Number(m.calories || m.Calories || 0), 0)
   })
 
+  const getBarColors = (values: number[], targetKcal: number, maintenanceKcal: number) => {
+    const bg: string[] = []
+    const border: string[] = []
+    values.forEach((cal) => {
+      if (cal > maintenanceKcal && maintenanceKcal > 0) {
+        bg.push("rgba(244, 63, 94, 0.82)") // Red: over maintenance (> 2300)
+        border.push("#f43f5e")
+      } else if (cal > targetKcal && targetKcal > 0) {
+        bg.push("rgba(245, 158, 11, 0.85)") // Yellow: between target and maintenance (2001..2300)
+        border.push("#f59e0b")
+      } else {
+        bg.push("rgba(16, 185, 129, 0.8)") // Green: <= target (<= 2000)
+        border.push("#10b981")
+      }
+    })
+    return { bg, border }
+  }
+
+  const singleWeeklyValues = isMale ? weeklyMaleCalories : weeklyFemaleCalories
+  const singleBarColors = getBarColors(singleWeeklyValues, TARGET_CALORIES, MAINTENANCE_CALORIES)
+
   const weeklyBarData = isAll
     ? {
         labels: last7DaysLabels,
@@ -450,13 +471,62 @@ export function DashboardView({
         datasets: [
           {
             label: "แคลอรี่ (kcal)",
-            data: isMale ? weeklyMaleCalories : weeklyFemaleCalories,
-            backgroundColor: isMale ? "rgba(16, 185, 129, 0.6)" : "rgba(236, 72, 153, 0.6)",
-            borderColor: isMale ? "#10b981" : "#ec4899",
+            data: singleWeeklyValues,
+            backgroundColor: singleBarColors.bg,
+            borderColor: singleBarColors.border,
+            borderWidth: 1,
             borderRadius: 6,
           },
         ],
       }
+
+  const targetLinePlugin = React.useMemo(
+    () => ({
+      id: "targetCalorieLine",
+      afterDatasetsDraw(chart: any) {
+        if (isAll || !TARGET_CALORIES || TARGET_CALORIES <= 0) return
+        const { ctx, chartArea, scales } = chart
+        if (!chartArea || !scales?.y) return
+        const yPos = scales.y.getPixelForValue(TARGET_CALORIES)
+        if (yPos < chartArea.top || yPos > chartArea.bottom) return
+
+        ctx.save()
+        ctx.beginPath()
+        ctx.setLineDash([6, 4])
+        ctx.lineWidth = 2
+        ctx.strokeStyle = "#38bdf8" // Sky blue dashed target line
+        ctx.moveTo(chartArea.left, yPos)
+        ctx.lineTo(chartArea.right, yPos)
+        ctx.stroke()
+
+        // Label on right side of line
+        const labelText = `เป้า ${TARGET_CALORIES.toLocaleString()} kcal`
+        ctx.font = "600 11px sans-serif"
+        const textWidth = ctx.measureText(labelText).width
+        const padX = 6
+        const boxW = textWidth + padX * 2
+        const boxH = 18
+        const boxX = chartArea.right - boxW - 4
+        const boxY = Math.max(chartArea.top + 2, yPos - boxH - 4)
+
+        ctx.setLineDash([])
+        ctx.fillStyle = "rgba(15, 23, 42, 0.88)"
+        ctx.strokeStyle = "rgba(56, 189, 248, 0.6)"
+        ctx.lineWidth = 1
+        ctx.beginPath()
+        ctx.roundRect(boxX, boxY, boxW, boxH, 4)
+        ctx.fill()
+        ctx.stroke()
+
+        ctx.fillStyle = "#7dd3fc"
+        ctx.textAlign = "center"
+        ctx.textBaseline = "middle"
+        ctx.fillText(labelText, boxX + boxW / 2, boxY + boxH / 2)
+        ctx.restore()
+      },
+    }),
+    [isAll, TARGET_CALORIES]
+  )
 
   return (
     <div className="space-y-6">
@@ -1508,7 +1578,9 @@ export function DashboardView({
           </CardHeader>
           <CardContent className="h-64 pt-2">
             <Bar
+              key={`${selectedPerson}-${TARGET_CALORIES}`}
               data={weeklyBarData}
+              plugins={[targetLinePlugin]}
               options={{
                 responsive: true,
                 maintainAspectRatio: false,
