@@ -49,6 +49,7 @@ import { ProjectReviewModal } from "@/components/modals/ProjectReviewModal"
 import { SetStepGoalModal } from "@/components/modals/SetStepGoalModal"
 import { EditProjectModal } from "@/components/modals/EditProjectModal"
 import { formatThaiDate } from "@/lib/utils"
+import { groupMealsByFoodCategory } from "@/lib/mealCategories"
 import { Doughnut, Bar } from "react-chartjs-2"
 import {
   Chart as ChartJS,
@@ -277,6 +278,11 @@ export function DashboardView({
   const activeDateMeals = isAll
     ? meals.filter((m) => String(m.date || m.Date || "").split("T")[0] === activeDate)
     : (isMale ? maleActiveMeals : femaleActiveMeals)
+
+  const groupedActiveMeals = React.useMemo(
+    () => groupMealsByFoodCategory(activeDateMeals),
+    [activeDateMeals]
+  )
 
   // Calculate totals for active date
   const totalCalories = isAll ? (maleCalories + femaleCalories) : (isMale ? maleCalories : femaleCalories)
@@ -1434,68 +1440,187 @@ export function DashboardView({
               </Button>
             </div>
           ) : (
-            <div className="divide-y divide-[#26334d]">
-              {activeDateMeals.map((meal) => {
-                const id = meal.id || meal.ID
-                const isMaleMeal = meal.person === "ฝ่ายชาย"
-                return (
-                  <div
-                    key={id}
-                    className="py-3 flex items-center justify-between gap-4 hover:bg-slate-800/30 px-2 rounded-lg transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`p-1 rounded-full ${isMaleMeal ? "bg-emerald-500/20 text-emerald-400" : "bg-pink-500/20 text-pink-400"}`}>
-                        <CheckCircle2 className="h-4 w-4" />
-                      </div>
-
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-medium text-white">
-                            {meal.foodName || meal.FoodName}
-                          </span>
-                          {isAll && (
-                            <Badge
-                              variant="secondary"
-                              className={`text-[10px] whitespace-nowrap ${
-                                isMaleMeal
-                                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
-                                  : "bg-pink-500/20 text-pink-300 border-pink-500/30"
-                              }`}
-                            >
-                              {isMaleMeal ? "🏋️‍♂️ ชาย" : "🧘‍♀️ หญิง"}
-                            </Badge>
-                          )}
-                          <Badge
-                            variant="secondary"
-                            className="text-[10px] bg-slate-800 text-slate-300 border-slate-700"
-                          >
-                            {meal.mealType || meal.MealType}
-                          </Badge>
-                          {meal.servings && (
-                            <span className="text-xs text-slate-400">({meal.servings} เสิร์ฟ)</span>
-                          )}
-                        </div>
-                        {meal.notes && (
-                          <p className="text-xs text-slate-400 mt-0.5">{meal.notes}</p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="text-right">
-                      <span className="text-sm font-semibold text-emerald-400">
-                        {meal.calories} kcal
-                      </span>
-                      <div className="text-[10px] text-slate-400 space-x-1">
-                        <span>P: {meal.protein}g</span>
-                        <span>•</span>
-                        <span>C: {meal.carbs}g</span>
-                        <span>•</span>
-                        <span>F: {meal.fat}g</span>
-                      </div>
-                    </div>
+            <div className="space-y-5">
+              {/* 3-Category Proportion Summary Bar */}
+              <div className="rounded-xl bg-[#0b0f19]/70 border border-[#26334d] p-4 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="text-sm font-semibold text-white flex items-center gap-2">
+                    <UtensilsCrossed className="h-4 w-4 text-indigo-400" />
+                    <span>
+                      สัดส่วนการกินแยกตามกลุ่มอาหาร (รวม {Math.round(totalCalories).toLocaleString()} kcal)
+                    </span>
                   </div>
-                )
-              })}
+                  <div className="text-xs font-medium text-indigo-300">
+                    {groupedActiveMeals
+                      .map((g) => `${g.group.shortLabel} ${g.percent}%`)
+                      .join(" : ")}
+                  </div>
+                </div>
+
+                {/* Stacked 3-segment progress bar */}
+                <div className="h-2.5 w-full rounded-full bg-slate-800 overflow-hidden flex">
+                  {groupedActiveMeals.map((g) =>
+                    g.percent > 0 ? (
+                      <div
+                        key={g.group.id}
+                        style={{ width: `${g.percent}%` }}
+                        className={`h-full ${g.group.barClass} transition-all duration-300`}
+                        title={`${g.group.label}: ${g.calories} kcal (${g.percent}%)`}
+                      />
+                    ) : null
+                  )}
+                </div>
+
+                {/* 3 Summary Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+                  {groupedActiveMeals.map((g) => (
+                    <div
+                      key={g.group.id}
+                      className={`rounded-xl bg-[#151d2f] border ${g.group.borderClass} p-3.5 space-y-2`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${g.group.dotClass}`} />
+                          <span className="text-xs font-semibold text-white truncate">
+                            {g.group.label}
+                          </span>
+                        </div>
+                        <Badge
+                          variant="secondary"
+                          className={`text-[11px] font-semibold shrink-0 ${g.group.badgeClass}`}
+                        >
+                          {g.percent}%
+                        </Badge>
+                      </div>
+
+                      <div className="flex items-baseline justify-between gap-2">
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-lg font-bold text-white">
+                            {g.calories.toLocaleString()}
+                          </span>
+                          <span className="text-xs text-slate-400">kcal</span>
+                        </div>
+                        <span className="text-[11px] text-slate-400">
+                          {g.meals.length} รายการ
+                        </span>
+                      </div>
+
+                      <div className="text-[11px] text-slate-400 flex items-center gap-1.5 flex-wrap">
+                        <span>P {g.protein}g</span>
+                        <span>•</span>
+                        <span>C {g.carbs}g</span>
+                        <span>•</span>
+                        <span>F {g.fat}g</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Grouped Meal Lists by 3 Categories */}
+              <div className="space-y-4">
+                {groupedActiveMeals.map((g) => (
+                  <div
+                    key={g.group.id}
+                    className={`rounded-xl border ${g.group.borderClass} bg-[#0b0f19]/40 overflow-hidden`}
+                  >
+                    <div
+                      className={`px-3.5 py-2.5 ${g.group.headerBgClass} border-b border-[#26334d] flex flex-wrap items-center justify-between gap-2`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`h-2.5 w-2.5 rounded-full ${g.group.dotClass}`} />
+                        <span className="text-sm font-semibold text-white">
+                          {g.group.label}
+                        </span>
+                        <Badge
+                          variant="secondary"
+                          className={`text-[10px] ${g.group.badgeClass}`}
+                        >
+                          {g.meals.length} รายการ • {g.percent}%
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs">
+                        <span className="text-slate-400 hidden sm:inline">
+                          P: {g.protein}g • C: {g.carbs}g • F: {g.fat}g
+                        </span>
+                        <span className={`font-semibold ${g.group.kcalTextClass}`}>
+                          {g.calories.toLocaleString()} kcal
+                        </span>
+                      </div>
+                    </div>
+
+                    {g.meals.length === 0 ? (
+                      <div className="px-4 py-3 text-xs text-slate-500">
+                        ยังไม่มีรายการอาหารในหมวดนี้
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-[#26334d] px-2">
+                        {g.meals.map((meal) => {
+                          const id = meal.id || meal.ID
+                          const isMaleMeal = meal.person === "ฝ่ายชาย"
+                          return (
+                            <div
+                              key={id}
+                              className="py-3 flex items-center justify-between gap-4 hover:bg-slate-800/30 px-2 rounded-lg transition-colors"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className={`p-1 rounded-full ${isMaleMeal ? "bg-emerald-500/20 text-emerald-400" : "bg-pink-500/20 text-pink-400"}`}>
+                                  <CheckCircle2 className="h-4 w-4" />
+                                </div>
+
+                                <div>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-sm font-medium text-white">
+                                      {meal.foodName || meal.FoodName}
+                                    </span>
+                                    {isAll && (
+                                      <Badge
+                                        variant="secondary"
+                                        className={`text-[10px] whitespace-nowrap ${
+                                          isMaleMeal
+                                            ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                                            : "bg-pink-500/20 text-pink-300 border-pink-500/30"
+                                        }`}
+                                      >
+                                        {isMaleMeal ? "🏋️‍♂️ ชาย" : "🧘‍♀️ หญิง"}
+                                      </Badge>
+                                    )}
+                                    <Badge
+                                      variant="secondary"
+                                      className="text-[10px] bg-slate-800 text-slate-300 border-slate-700"
+                                    >
+                                      {meal.mealType || meal.MealType}
+                                    </Badge>
+                                    {meal.servings && (
+                                      <span className="text-xs text-slate-400">({meal.servings} เสิร์ฟ)</span>
+                                    )}
+                                  </div>
+                                  {meal.notes && (
+                                    <p className="text-xs text-slate-400 mt-0.5">{meal.notes}</p>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="text-right shrink-0">
+                                <span className="text-sm font-semibold text-emerald-400">
+                                  {meal.calories} kcal
+                                </span>
+                                <div className="text-[10px] text-slate-400 space-x-1">
+                                  <span>P: {meal.protein}g</span>
+                                  <span>•</span>
+                                  <span>C: {meal.carbs}g</span>
+                                  <span>•</span>
+                                  <span>F: {meal.fat}g</span>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </CardContent>
