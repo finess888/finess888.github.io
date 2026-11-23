@@ -1,5 +1,45 @@
 export type FoodGroupId = "protein" | "rice" | "snack"
 
+export interface FoodGroupTarget {
+  calories: number
+  percent: number
+}
+
+export type PersonFoodGroupTargets = Record<FoodGroupId, FoodGroupTarget>
+
+export const MALE_FOOD_GROUP_TARGETS: PersonFoodGroupTargets = {
+  protein: { calories: 910, percent: 46 },
+  rice: { calories: 450, percent: 23 },
+  snack: { calories: 640, percent: 31 },
+}
+
+export const FEMALE_FOOD_GROUP_TARGETS: PersonFoodGroupTargets = {
+  protein: { calories: 840, percent: 65 },
+  rice: { calories: 250, percent: 19 },
+  snack: { calories: 210, percent: 16 },
+}
+
+export const ALL_FOOD_GROUP_TARGETS: PersonFoodGroupTargets = {
+  protein: {
+    calories: MALE_FOOD_GROUP_TARGETS.protein.calories + FEMALE_FOOD_GROUP_TARGETS.protein.calories,
+    percent: Math.round(((910 + 840) / 3300) * 100),
+  },
+  rice: {
+    calories: MALE_FOOD_GROUP_TARGETS.rice.calories + FEMALE_FOOD_GROUP_TARGETS.rice.calories,
+    percent: Math.round(((450 + 250) / 3300) * 100),
+  },
+  snack: {
+    calories: MALE_FOOD_GROUP_TARGETS.snack.calories + FEMALE_FOOD_GROUP_TARGETS.snack.calories,
+    percent: Math.round(((640 + 210) / 3300) * 100),
+  },
+}
+
+export function getFoodGroupTargets(selectedPerson: string): PersonFoodGroupTargets {
+  if (selectedPerson === "ฝ่ายหญิง") return FEMALE_FOOD_GROUP_TARGETS
+  if (selectedPerson === "ฝ่ายชาย") return MALE_FOOD_GROUP_TARGETS
+  return ALL_FOOD_GROUP_TARGETS
+}
+
 export interface FoodGroupMeta {
   id: FoodGroupId
   order: number

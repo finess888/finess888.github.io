@@ -49,7 +49,7 @@ import { ProjectReviewModal } from "@/components/modals/ProjectReviewModal"
 import { SetStepGoalModal } from "@/components/modals/SetStepGoalModal"
 import { EditProjectModal } from "@/components/modals/EditProjectModal"
 import { formatThaiDate } from "@/lib/utils"
-import { groupMealsByFoodCategory } from "@/lib/mealCategories"
+import { groupMealsByFoodCategory, getFoodGroupTargets } from "@/lib/mealCategories"
 import { Doughnut, Bar } from "react-chartjs-2"
 import {
   Chart as ChartJS,
@@ -282,6 +282,10 @@ export function DashboardView({
   const groupedActiveMeals = React.useMemo(
     () => groupMealsByFoodCategory(activeDateMeals),
     [activeDateMeals]
+  )
+  const foodGroupTargets = React.useMemo(
+    () => getFoodGroupTargets(selectedPerson),
+    [selectedPerson]
   )
 
   // Calculate totals for active date
@@ -1447,13 +1451,28 @@ export function DashboardView({
                   <div className="text-sm font-semibold text-white flex items-center gap-2">
                     <UtensilsCrossed className="h-4 w-4 text-indigo-400" />
                     <span>
-                      สัดส่วนการกินแยกตามกลุ่มอาหาร (รวม {Math.round(totalCalories).toLocaleString()} kcal)
+                      สัดส่วนการกินแยกตามกลุ่มอาหาร (จริง {Math.round(totalCalories).toLocaleString()} / เป้า{" "}
+                      {(
+                        foodGroupTargets.protein.calories +
+                        foodGroupTargets.rice.calories +
+                        foodGroupTargets.snack.calories
+                      ).toLocaleString()}{" "}
+                      kcal)
                     </span>
                   </div>
-                  <div className="text-xs font-medium text-indigo-300">
-                    {groupedActiveMeals
-                      .map((g) => `${g.group.shortLabel} ${g.percent}%`)
-                      .join(" : ")}
+                  <div className="text-xs space-y-0.5 sm:text-right">
+                    <div className="font-medium text-indigo-300">
+                      จริง:{" "}
+                      {groupedActiveMeals
+                        .map((g) => `${g.group.shortLabel} ${g.percent}%`)
+                        .join(" : ")}
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      เป้า ({isAll ? "รวมทั้งคู่" : selectedPerson}):{" "}
+                      {groupedActiveMeals
+                        .map((g) => `${g.group.shortLabel} ${foodGroupTargets[g.group.id].percent}%`)
+                        .join(" : ")}
+                    </div>
                   </div>
                 </div>
 
@@ -1473,47 +1492,78 @@ export function DashboardView({
 
                 {/* 3 Summary Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
-                  {groupedActiveMeals.map((g) => (
-                    <div
-                      key={g.group.id}
-                      className={`rounded-xl bg-[#151d2f] border ${g.group.borderClass} p-3.5 space-y-2`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${g.group.dotClass}`} />
-                          <span className="text-xs font-semibold text-white truncate">
-                            {g.group.label}
+                  {groupedActiveMeals.map((g) => {
+                    const target = foodGroupTargets[g.group.id]
+                    const diff = target.calories - g.calories
+                    const fillPct = target.calories > 0 ? Math.min(100, Math.round((g.calories / target.calories) * 100)) : 0
+                    const isOver = diff < 0
+                    return (
+                      <div
+                        key={g.group.id}
+                        className={`rounded-xl bg-[#151d2f] border ${g.group.borderClass} p-3.5 space-y-2`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${g.group.dotClass}`} />
+                            <span className="text-xs font-semibold text-white truncate">
+                              {g.group.label}
+                            </span>
+                          </div>
+                          <Badge
+                            variant="secondary"
+                            className={`text-[11px] font-semibold shrink-0 ${g.group.badgeClass}`}
+                          >
+                            {g.percent}% / เป้า {target.percent}%
+                          </Badge>
+                        </div>
+
+                        <div className="flex items-baseline justify-between gap-2">
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-lg font-bold text-white">
+                              {g.calories.toLocaleString()}
+                            </span>
+                            <span className="text-xs text-slate-400">
+                              / {target.calories.toLocaleString()} kcal
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-slate-400">
+                            {g.meals.length} รายการ
                           </span>
                         </div>
-                        <Badge
-                          variant="secondary"
-                          className={`text-[11px] font-semibold shrink-0 ${g.group.badgeClass}`}
-                        >
-                          {g.percent}%
-                        </Badge>
-                      </div>
 
-                      <div className="flex items-baseline justify-between gap-2">
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-lg font-bold text-white">
-                            {g.calories.toLocaleString()}
-                          </span>
-                          <span className="text-xs text-slate-400">kcal</span>
+                        {/* Category target progress bar */}
+                        <div className="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
+                          <div
+                            style={{ width: `${fillPct}%` }}
+                            className={`h-full rounded-full transition-all duration-300 ${
+                              isOver ? "bg-rose-500" : g.group.barClass
+                            }`}
+                          />
                         </div>
-                        <span className="text-[11px] text-slate-400">
-                          {g.meals.length} รายการ
-                        </span>
-                      </div>
 
-                      <div className="text-[11px] text-slate-400 flex items-center gap-1.5 flex-wrap">
-                        <span>P {g.protein}g</span>
-                        <span>•</span>
-                        <span>C {g.carbs}g</span>
-                        <span>•</span>
-                        <span>F {g.fat}g</span>
+                        <div className="flex items-center justify-between gap-2 text-[11px]">
+                          <span className="text-slate-400">
+                            P {g.protein}g • C {g.carbs}g • F {g.fat}g
+                          </span>
+                          <span
+                            className={`font-medium shrink-0 ${
+                              isOver
+                                ? "text-rose-400"
+                                : diff === 0
+                                  ? "text-emerald-400"
+                                  : "text-emerald-300"
+                            }`}
+                          >
+                            {isOver
+                              ? `เกิน +${Math.abs(diff).toLocaleString()} kcal`
+                              : diff === 0
+                                ? "ครบเป้าพอดี"
+                                : `เหลือ ${diff.toLocaleString()} kcal`}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
 
