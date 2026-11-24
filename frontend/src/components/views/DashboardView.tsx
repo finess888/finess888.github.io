@@ -554,6 +554,169 @@ export function DashboardView({
     [isAll, TARGET_CALORIES]
   )
 
+  // Sleep Trend Bar Chart (7 / 14 / 30 days) styled identically to Calorie Trend Bar Chart
+  const [sleepDaysRange, setSleepDaysRange] = React.useState<7 | 14 | 30>(30)
+  const allSleepLogsForChart = getSleepLogs()
+  const activeSleepGoal = isFemale
+    ? getSleepGoal("ฝ่ายหญิง") || 8
+    : getSleepGoal("ฝ่ายชาย") || 8
+
+  const sleepChartDates: string[] = []
+  const sleepChartLabels: string[] = []
+  for (let i = sleepDaysRange - 1; i >= 0; i--) {
+    const d = new Date()
+    d.setDate(d.getDate() - i)
+    const iso = d.toLocaleDateString("en-CA")
+    sleepChartDates.push(iso)
+    sleepChartLabels.push(`${d.getDate()}/${d.getMonth() + 1}`)
+  }
+
+  const sleepMaleEntriesByDate = sleepChartDates.map((isoDate) =>
+    allSleepLogsForChart.find((s) => s.person === "ฝ่ายชาย" && s.date === isoDate)
+  )
+  const sleepFemaleEntriesByDate = sleepChartDates.map((isoDate) =>
+    allSleepLogsForChart.find((s) => s.person === "ฝ่ายหญิง" && s.date === isoDate)
+  )
+
+  const weeklyMaleSleepHours = sleepMaleEntriesByDate.map((entry) =>
+    entry ? Number(entry.durationHours || 0) : 0
+  )
+  const weeklyFemaleSleepHours = sleepFemaleEntriesByDate.map((entry) =>
+    entry ? Number(entry.durationHours || 0) : 0
+  )
+
+  const activeSleepSeries = isAll
+    ? weeklyMaleSleepHours.map((m, idx) => {
+        const f = weeklyFemaleSleepHours[idx]
+        if (m > 0 && f > 0) return Number(((m + f) / 2).toFixed(1))
+        return m > 0 ? m : f
+      })
+    : isMale
+    ? weeklyMaleSleepHours
+    : weeklyFemaleSleepHours
+
+  const sleepLoggedValues = activeSleepSeries.filter((h) => h > 0)
+  const lastSleepLoggedDays = sleepLoggedValues.length
+  const lastSleepOnTargetDays = sleepLoggedValues.filter(
+    (h) => h >= activeSleepGoal
+  ).length
+  const lastSleepAdherencePct =
+    lastSleepLoggedDays > 0
+      ? Math.round((lastSleepOnTargetDays / lastSleepLoggedDays) * 100)
+      : 0
+  const avgSleepHoursInRange =
+    lastSleepLoggedDays > 0
+      ? Number(
+          (
+            sleepLoggedValues.reduce((sum, h) => sum + h, 0) /
+            lastSleepLoggedDays
+          ).toFixed(1)
+        )
+      : 0
+
+  const getSleepBarColors = (values: number[], goalHours: number) => {
+    const bg: string[] = []
+    const border: string[] = []
+    values.forEach((h) => {
+      if (h >= goalHours) {
+        bg.push("rgba(16, 185, 129, 0.82)") // Green: met sleep goal (>= 8h)
+        border.push("#10b981")
+      } else if (h >= 6) {
+        bg.push("rgba(245, 158, 11, 0.85)") // Yellow: moderate sleep (6.0 - 7.9h)
+        border.push("#f59e0b")
+      } else {
+        bg.push("rgba(244, 63, 94, 0.82)") // Red: short sleep (< 6h)
+        border.push("#f43f5e")
+      }
+    })
+    return { bg, border }
+  }
+
+  const singleSleepValues = isMale ? weeklyMaleSleepHours : weeklyFemaleSleepHours
+  const singleSleepBarColors = getSleepBarColors(singleSleepValues, activeSleepGoal)
+
+  const sleepBarData = isAll
+    ? {
+        labels: sleepChartLabels,
+        datasets: [
+          {
+            label: "ฝ่ายชาย (ชม.)",
+            data: weeklyMaleSleepHours,
+            backgroundColor: "rgba(16, 185, 129, 0.75)",
+            borderColor: "#10b981",
+            borderRadius: 6,
+          },
+          {
+            label: "ฝ่ายหญิง (ชม.)",
+            data: weeklyFemaleSleepHours,
+            backgroundColor: "rgba(236, 72, 153, 0.75)",
+            borderColor: "#ec4899",
+            borderRadius: 6,
+          },
+        ],
+      }
+    : {
+        labels: sleepChartLabels,
+        datasets: [
+          {
+            label: "เวลานอน (ชม.)",
+            data: singleSleepValues,
+            backgroundColor: singleSleepBarColors.bg,
+            borderColor: singleSleepBarColors.border,
+            borderWidth: 1,
+            borderRadius: 6,
+          },
+        ],
+      }
+
+  const sleepTargetLinePlugin = React.useMemo(
+    () => ({
+      id: "targetSleepLine",
+      afterDatasetsDraw(chart: any) {
+        if (!activeSleepGoal || activeSleepGoal <= 0) return
+        const { ctx, chartArea, scales } = chart
+        if (!chartArea || !scales?.y) return
+        const yPos = scales.y.getPixelForValue(activeSleepGoal)
+        if (yPos < chartArea.top || yPos > chartArea.bottom) return
+
+        ctx.save()
+        ctx.beginPath()
+        ctx.setLineDash([6, 4])
+        ctx.lineWidth = 2
+        ctx.strokeStyle = "#38bdf8" // Sky blue dashed target line
+        ctx.moveTo(chartArea.left, yPos)
+        ctx.lineTo(chartArea.right, yPos)
+        ctx.stroke()
+
+        // Label on right side of line
+        const labelText = `เป้า ${activeSleepGoal} ชม.`
+        ctx.font = "600 11px sans-serif"
+        const textWidth = ctx.measureText(labelText).width
+        const padX = 6
+        const boxW = textWidth + padX * 2
+        const boxH = 18
+        const boxX = chartArea.right - boxW - 4
+        const boxY = Math.max(chartArea.top + 2, yPos - boxH - 4)
+
+        ctx.setLineDash([])
+        ctx.fillStyle = "rgba(15, 23, 42, 0.88)"
+        ctx.strokeStyle = "rgba(56, 189, 248, 0.6)"
+        ctx.lineWidth = 1
+        ctx.beginPath()
+        ctx.roundRect(boxX, boxY, boxW, boxH, 4)
+        ctx.fill()
+        ctx.stroke()
+
+        ctx.fillStyle = "#7dd3fc"
+        ctx.textAlign = "center"
+        ctx.textBaseline = "middle"
+        ctx.fillText(labelText, boxX + boxW / 2, boxY + boxH / 2)
+        ctx.restore()
+      },
+    }),
+    [activeSleepGoal]
+  )
+
   return (
     <div className="space-y-6">
       {/* Top Banner & Action Buttons */}
@@ -1868,8 +2031,44 @@ export function DashboardView({
                 })}
               </div>
 
-              {/* 3 Summary Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+              {/* Macro Doughnut (moved up) + 3 Food Group Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+                {/* Macro Doughnut Card inside Unified Nutrition Section */}
+                <div className="rounded-xl bg-[#0b0f19]/70 border border-[#26334d] p-3.5 flex flex-col items-center justify-between">
+                  <div className="w-full flex items-center justify-between">
+                    <span className="text-xs font-semibold text-white">
+                      สัดส่วนสารอาหารวันนี้ (Macros)
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      {isAll ? "รวมทั้งคู่" : selectedPerson}
+                    </span>
+                  </div>
+                  <div className="w-28 h-28 relative my-1.5">
+                    <Doughnut
+                      data={macroChartData}
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                      }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-center gap-2.5 text-[11px] w-full pt-1 border-t border-[#26334d]/60">
+                    <span className="flex items-center gap-1 text-emerald-400 font-mono">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                      P: {totalProtein.toFixed(0)}g
+                    </span>
+                    <span className="flex items-center gap-1 text-amber-400 font-mono">
+                      <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
+                      C: {totalCarbs.toFixed(0)}g
+                    </span>
+                    <span className="flex items-center gap-1 text-rose-400 font-mono">
+                      <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />
+                      F: {totalFat.toFixed(0)}g
+                    </span>
+                  </div>
+                </div>
+
                 {groupedActiveMeals.map((g) => {
                   const target = foodGroupTargets[g.group.id]
                   const pctOfTarget = Math.round((g.calories / safeTargetTotal) * 100)
@@ -1879,48 +2078,50 @@ export function DashboardView({
                   return (
                     <div
                       key={g.group.id}
-                      className={`rounded-xl bg-[#0b0f19]/70 border ${g.group.borderClass} p-3.5 space-y-2`}
+                      className={`rounded-xl bg-[#0b0f19]/70 border ${g.group.borderClass} p-3.5 space-y-2 flex flex-col justify-between`}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${g.group.dotClass}`} />
-                          <span className="text-xs font-semibold text-white truncate">
-                            {g.group.label}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${g.group.dotClass}`} />
+                            <span className="text-xs font-semibold text-white truncate">
+                              {g.group.label}
+                            </span>
+                          </div>
+                          <Badge
+                            variant="secondary"
+                            className={`text-[11px] font-semibold shrink-0 ${g.group.badgeClass}`}
+                          >
+                            {pctOfTarget}% / เป้า {target.percent}%
+                          </Badge>
+                        </div>
+
+                        <div className="flex items-baseline justify-between gap-2">
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-lg font-bold text-white">
+                              {g.calories.toLocaleString()}
+                            </span>
+                            <span className="text-xs text-slate-400">
+                              / {target.calories.toLocaleString()} kcal
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-slate-400">
+                            {g.meals.length} รายการ
                           </span>
                         </div>
-                        <Badge
-                          variant="secondary"
-                          className={`text-[11px] font-semibold shrink-0 ${g.group.badgeClass}`}
-                        >
-                          {pctOfTarget}% / เป้า {target.percent}%
-                        </Badge>
-                      </div>
 
-                      <div className="flex items-baseline justify-between gap-2">
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-lg font-bold text-white">
-                            {g.calories.toLocaleString()}
-                          </span>
-                          <span className="text-xs text-slate-400">
-                            / {target.calories.toLocaleString()} kcal
-                          </span>
+                        {/* Category target progress bar */}
+                        <div className="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
+                          <div
+                            style={{ width: `${fillPct}%` }}
+                            className={`h-full rounded-full transition-all duration-300 ${
+                              isOver ? "bg-rose-500" : g.group.barClass
+                            }`}
+                          />
                         </div>
-                        <span className="text-[11px] text-slate-400">
-                          {g.meals.length} รายการ
-                        </span>
                       </div>
 
-                      {/* Category target progress bar */}
-                      <div className="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
-                        <div
-                          style={{ width: `${fillPct}%` }}
-                          className={`h-full rounded-full transition-all duration-300 ${
-                            isOver ? "bg-rose-500" : g.group.barClass
-                          }`}
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between gap-2 text-[11px]">
+                      <div className="flex items-center justify-between gap-2 text-[11px] pt-1">
                         <span className="text-slate-400">
                           P {g.protein}g • C {g.carbs}g • F {g.fat}g
                         </span>
@@ -1951,43 +2152,10 @@ export function DashboardView({
         </CardContent>
       </Card>
 
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Macro Doughnut */}
+      {/* Side-by-Side Trend Charts Section: Calorie Trend vs Sleep Trend */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left: Dynamic Calorie Trend Bar Chart (7 / 14 / 30 Days) */}
         <Card className="bg-[#151d2f] border-[#26334d]">
-          <CardHeader>
-            <CardTitle className="text-base font-semibold text-white">สัดส่วนสารอาหารวันนี้ (Macros)</CardTitle>
-            <CardDescription className="text-slate-400 text-xs">
-              สัดส่วนโปรตีน / คาร์บ / ไขมัน ของ {selectedPerson}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col items-center justify-center p-4">
-            <div className="w-44 h-44 relative">
-              <Doughnut
-                data={macroChartData}
-                options={{
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  plugins: { legend: { display: false } },
-                }}
-              />
-            </div>
-            <div className="flex items-center justify-center gap-3 mt-4 text-xs">
-              <span className="flex items-center gap-1.5 text-emerald-400">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> P: {totalProtein}g
-              </span>
-              <span className="flex items-center gap-1.5 text-amber-400">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" /> C: {totalCarbs}g
-              </span>
-              <span className="flex items-center gap-1.5 text-rose-400">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block" /> F: {totalFat}g
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Dynamic Trend Bar Chart (7 / 14 / 30 Days) */}
-        <Card className="lg:col-span-2 bg-[#151d2f] border-[#26334d]">
           <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
               <CardTitle className="text-base font-semibold text-white flex items-center gap-2 flex-wrap">
@@ -2043,7 +2211,7 @@ export function DashboardView({
           </CardHeader>
           <CardContent className="h-64 pt-2">
             <Bar
-              key={`${selectedPerson}-${TARGET_CALORIES}`}
+              key={`cal-${selectedPerson}-${TARGET_CALORIES}-${chartDaysRange}`}
               data={weeklyBarData}
               plugins={[targetLinePlugin]}
               options={{
@@ -2063,6 +2231,117 @@ export function DashboardView({
                   legend: {
                     display: isAll,
                     labels: { color: "#94a3b8", font: { size: 11 } },
+                  },
+                },
+              }}
+            />
+          </CardContent>
+        </Card>
+
+        {/* Right: Dynamic Sleep Trend Bar Chart (7 / 14 / 30 Days) matching the Calorie Chart */}
+        <Card className="bg-[#151d2f] border-[#26334d]">
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-base font-semibold text-white flex items-center gap-2 flex-wrap">
+                <span>เวลานอน {sleepDaysRange} วันล่าสุด ({selectedPerson})</span>
+                <Badge
+                  variant="outline"
+                  className={
+                    lastSleepAdherencePct >= 70
+                      ? "border-emerald-500/40 text-emerald-300 bg-emerald-500/15"
+                      : lastSleepAdherencePct >= 40
+                        ? "border-amber-500/40 text-amber-300 bg-amber-500/15"
+                        : "border-rose-500/40 text-rose-300 bg-rose-500/15"
+                  }
+                >
+                  ทำตามเป้า {lastSleepAdherencePct}% ({lastSleepOnTargetDays}/{lastSleepLoggedDays} วัน)
+                </Badge>
+              </CardTitle>
+              <CardDescription className="text-slate-400 text-xs mt-0.5">
+                แนวโน้มการนอนหลับ {sleepDaysRange} วันล่าสุด เปรียบเทียบเป้าหมาย {activeSleepGoal} ชม. (สีเขียว ≥ {activeSleepGoal} ชม. • เหลือง 6-{activeSleepGoal} ชม. • แดง &lt; 6 ชม.)
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Timeframe Switcher */}
+              <div className="flex items-center gap-1 bg-[#0b0f19] p-1 rounded-lg border border-[#26334d]">
+                {([7, 14, 30] as const).map((days) => (
+                  <button
+                    key={days}
+                    type="button"
+                    onClick={() => setSleepDaysRange(days)}
+                    className={`px-2 py-0.5 rounded text-[11px] font-medium transition-all ${
+                      sleepDaysRange === days
+                        ? "bg-emerald-600 text-white font-semibold"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    {days} วัน
+                  </button>
+                ))}
+              </div>
+              <Badge variant="outline" className="border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
+                เฉลี่ย: {avgSleepHoursInRange} ชม. (เป้า {activeSleepGoal} ชม.)
+              </Badge>
+              {onOpenAddSleep && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    onOpenAddSleep(
+                      activeDate,
+                      selectedPerson === "ALL" ? "ฝ่ายชาย" : selectedPerson
+                    )
+                  }
+                  className="text-[11px] h-7 px-2 text-sky-300 hover:text-white hover:bg-sky-600/20 border border-sky-500/30"
+                >
+                  <Moon className="h-3 w-3 mr-1" />
+                  จดเวลานอน
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="h-64 pt-2">
+            <Bar
+              key={`sleep-${selectedPerson}-${activeSleepGoal}-${sleepDaysRange}`}
+              data={sleepBarData}
+              plugins={[sleepTargetLinePlugin]}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                  y: {
+                    beginAtZero: true,
+                    suggestedMax: 10,
+                    grid: { color: "rgba(255, 255, 255, 0.05)" },
+                    ticks: { color: "#94a3b8" },
+                  },
+                  x: {
+                    grid: { display: false },
+                    ticks: { color: "#94a3b8", font: { size: 10 }, maxRotation: 45, autoSkip: true },
+                  },
+                },
+                plugins: {
+                  legend: {
+                    display: isAll,
+                    labels: { color: "#94a3b8", font: { size: 11 } },
+                  },
+                  tooltip: {
+                    callbacks: {
+                      afterLabel(context: any) {
+                        const idx = context.dataIndex
+                        const entry = isAll
+                          ? context.datasetIndex === 0
+                            ? sleepMaleEntriesByDate[idx]
+                            : sleepFemaleEntriesByDate[idx]
+                          : isMale
+                          ? sleepMaleEntriesByDate[idx]
+                          : sleepFemaleEntriesByDate[idx]
+                        if (entry) {
+                          return `เข้านอน ${entry.bedTime} น. - ตื่น ${entry.wakeTime} น. (${entry.quality})`
+                        }
+                        return ""
+                      },
+                    },
                   },
                 },
               }}
