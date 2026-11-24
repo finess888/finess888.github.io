@@ -801,11 +801,76 @@ export function DashboardView({
               <span>👥</span> รวม (เปรียบเทียบ)
             </button>
           </div>
+        </div>
+      </div>
 
-          {/* Action Buttons: Add Weight, Add Step & Add Meal */}
+      {/* 📅 Date Navigator Bar + 4 Unified Action Buttons Underneath */}
+      <div className="bg-[#111726] border border-[#26334d] p-3.5 rounded-2xl shadow-lg space-y-3">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePrevDay}
+              className="border-[#26334d] bg-[#0b0f19] text-slate-300 hover:text-white hover:bg-slate-800 h-8 px-2.5"
+              title="ดูวันก่อนหน้า"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+
+            <div className="px-3.5 py-1.5 bg-[#0b0f19] border border-[#26334d] rounded-xl text-sm font-bold text-white font-mono flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-emerald-400" />
+              <span>{formatThaiDate(activeDate)}</span>
+              {isToday ? (
+                <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-[10px] px-2 py-0.5">
+                  🌟 วันนี้
+                </Badge>
+              ) : (
+                <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/30 text-[10px] px-2 py-0.5">
+                  📅 ดูย้อนหลัง
+                </Badge>
+              )}
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleNextDay}
+              className="border-[#26334d] bg-[#0b0f19] text-slate-300 hover:text-white hover:bg-slate-800 h-8 px-2.5"
+              title="ดูวันถัดไป"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+
+            {!isToday && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleToday}
+                className="text-xs text-emerald-400 hover:text-white hover:bg-emerald-900/30 h-8 px-2.5 font-bold flex items-center gap-1"
+              >
+                <span>กลับมาวันนี้</span>
+              </Button>
+            )}
+          </div>
+
+          {/* Date Picker Input */}
+          <div className="flex items-center gap-2 text-xs text-slate-300 bg-[#0b0f19] px-3 py-1 rounded-xl border border-[#26334d]">
+            <span className="text-[11px] text-slate-400">เลือกวันที่:</span>
+            <Input
+              type="date"
+              value={activeDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="bg-transparent border-none text-white text-xs h-7 w-32 p-0 focus:ring-0 font-mono"
+            />
+          </div>
+        </div>
+
+        {/* 4 Unified Daily Recording Buttons directly under the Date Bar */}
+        <div className="pt-2.5 border-t border-[#26334d]/80 grid grid-cols-2 sm:grid-cols-4 gap-2.5">
           <Button
             onClick={onOpenAddWeight}
-            className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium flex items-center gap-1.5 h-9 px-3 shadow-md shadow-indigo-950"
+            className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 h-9 px-3 shadow-md shadow-indigo-950 w-full"
           >
             <Scale className="h-4 w-4" />
             + บันทึกน้ำหนัก
@@ -814,7 +879,7 @@ export function DashboardView({
           {onOpenAddStep && (
             <Button
               onClick={onOpenAddStep}
-              className="bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium flex items-center gap-1.5 h-9 px-3 shadow-md shadow-purple-950"
+              className="bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 h-9 px-3 shadow-md shadow-purple-950 w-full"
             >
               <Footprints className="h-4 w-4" />
               + บันทึกก้าวเดิน
@@ -829,7 +894,7 @@ export function DashboardView({
                   selectedPerson === "ALL" ? "ฝ่ายชาย" : selectedPerson
                 )
               }
-              className="bg-sky-600 hover:bg-sky-500 text-white text-xs font-medium flex items-center gap-1.5 h-9 px-3 shadow-md shadow-sky-950"
+              className="bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 h-9 px-3 shadow-md shadow-sky-950 w-full"
             >
               <Moon className="h-4 w-4" />
               + บันทึกเวลานอน
@@ -838,72 +903,11 @@ export function DashboardView({
 
           <Button
             onClick={() => onOpenAddMeal(activeDate)}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium flex items-center gap-1.5 h-9 px-3 shadow-md shadow-emerald-950"
+            className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 h-9 px-3 shadow-md shadow-emerald-950 w-full"
           >
             <Plus className="h-4 w-4" />
-            + เพิ่มมื้ออาหาร
+            + บันทึกมื้ออาหาร
           </Button>
-        </div>
-      </div>
-
-      {/* 📅 Date Navigator Bar: ค่าเริ่มต้นคือ "วันนี้" เสมอ พร้อมปุ่มเลื่อนวันและดูย้อนหลัง */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-[#111726] border border-[#26334d] p-3 rounded-2xl shadow-lg">
-        <div className="flex items-center gap-2 flex-wrap">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handlePrevDay}
-            className="border-[#26334d] bg-[#0b0f19] text-slate-300 hover:text-white hover:bg-slate-800 h-8 px-2.5"
-            title="ดูวันก่อนหน้า"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-
-          <div className="px-3.5 py-1.5 bg-[#0b0f19] border border-[#26334d] rounded-xl text-sm font-bold text-white font-mono flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-emerald-400" />
-            <span>{formatThaiDate(activeDate)}</span>
-            {isToday ? (
-              <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-[10px] px-2 py-0.5">
-                🌟 วันนี้
-              </Badge>
-            ) : (
-              <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/30 text-[10px] px-2 py-0.5">
-                📅 ดูย้อนหลัง
-              </Badge>
-            )}
-          </div>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleNextDay}
-            className="border-[#26334d] bg-[#0b0f19] text-slate-300 hover:text-white hover:bg-slate-800 h-8 px-2.5"
-            title="ดูวันถัดไป"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-
-          {!isToday && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleToday}
-              className="text-xs text-emerald-400 hover:text-white hover:bg-emerald-900/30 h-8 px-2.5 font-bold flex items-center gap-1"
-            >
-              <span>กลับมาวันนี้</span>
-            </Button>
-          )}
-        </div>
-
-        {/* Date Picker Input */}
-        <div className="flex items-center gap-2 text-xs text-slate-300 bg-[#0b0f19] px-3 py-1 rounded-xl border border-[#26334d]">
-          <span className="text-[11px] text-slate-400">เลือกวันที่:</span>
-          <Input
-            type="date"
-            value={activeDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="bg-transparent border-none text-white text-xs h-7 w-32 p-0 focus:ring-0 font-mono"
-          />
         </div>
       </div>
 
@@ -1085,15 +1089,7 @@ export function DashboardView({
                     <span className="text-[10px] text-slate-400">
                       {sleepEval ? sleepEval.label : "เป้า 7.5 - 8 ชม."}
                     </span>
-                    {onOpenAddSleep && (
-                      <button
-                        type="button"
-                        onClick={() => onOpenAddSleep(activeDate, targetPersonKey)}
-                        className="text-[10px] text-sky-300 hover:text-white bg-sky-500/15 hover:bg-sky-600 px-2 py-0.5 rounded border border-sky-500/30 transition-all"
-                      >
-                        {singleSleepEntry ? "แก้ไขเวลา" : "+ จดเวลานอน"}
-                      </button>
-                    )}
+                    <span className="text-[10px] text-slate-500">ฟื้นฟูร่างกาย</span>
                   </div>
                 </div>
 
@@ -1134,13 +1130,6 @@ export function DashboardView({
                         ? `-${(MAINTENANCE_CALORIES - totalCalories).toLocaleString()} kcal`
                         : "เกินเมนเทน"}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => onOpenAddMeal(activeDate)}
-                      className="text-[10px] text-emerald-300 hover:text-white bg-emerald-500/15 hover:bg-emerald-600 px-2 py-0.5 rounded border border-emerald-500/30 transition-all"
-                    >
-                      + จดมื้ออาหาร
-                    </button>
                   </div>
                 </div>
 
@@ -1212,15 +1201,6 @@ export function DashboardView({
                     <span className="text-[10px] text-slate-400">
                       เผาผลาญ ~{Math.round(activeSteps * 0.035)} kcal
                     </span>
-                    {onOpenAddStep && (
-                      <button
-                        type="button"
-                        onClick={onOpenAddStep}
-                        className="text-[10px] text-indigo-300 hover:text-white bg-indigo-500/15 hover:bg-indigo-600 px-2 py-0.5 rounded border border-indigo-500/30 transition-all"
-                      >
-                        + กรอกก้าว
-                      </button>
-                    )}
                   </div>
                 </div>
               </div>
@@ -1729,15 +1709,6 @@ export function DashboardView({
                   </strong>
                 </div>
               </div>
-              {onOpenAddStep && (
-                <button
-                  type="button"
-                  onClick={onOpenAddStep}
-                  className="text-[10px] bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600 hover:text-white px-2.5 py-1 rounded-md border border-indigo-500/30 font-medium transition-all shrink-0 ml-auto sm:ml-2"
-                >
-                  + กรอกก้าว
-                </button>
-              )}
             </div>
 
             {/* Sleep & Wake Time Status */}
@@ -1770,20 +1741,6 @@ export function DashboardView({
                   </strong>
                 </div>
               </div>
-              {onOpenAddSleep && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    onOpenAddSleep(
-                      activeDate,
-                      isFemale ? "ฝ่ายหญิง" : "ฝ่ายชาย"
-                    )
-                  }
-                  className="text-[10px] bg-sky-600/20 text-sky-300 hover:bg-sky-600 hover:text-white px-2.5 py-1 rounded-md border border-sky-500/30 font-medium transition-all shrink-0 ml-auto sm:ml-2"
-                >
-                  + เวลานอน
-                </button>
-              )}
             </div>
 
             <div className="flex items-center justify-between sm:justify-end gap-2 flex-wrap">
@@ -2198,15 +2155,6 @@ export function DashboardView({
               <Badge variant="outline" className="border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
                 นน. ล่าสุด: {currentWeight} kg (เป้า {ULTIMATE_TARGET_WEIGHT} kg)
               </Badge>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onOpenAddWeight}
-                className="text-[11px] h-7 px-2 text-indigo-300 hover:text-white hover:bg-indigo-600/20 border border-indigo-500/30"
-              >
-                <Scale className="h-3 w-3 mr-1" />
-                ชั่งน้ำหนัก
-              </Button>
             </div>
           </CardHeader>
           <CardContent className="h-64 pt-2">
@@ -2282,22 +2230,6 @@ export function DashboardView({
               <Badge variant="outline" className="border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
                 เฉลี่ย: {avgSleepHoursInRange} ชม. (เป้า {activeSleepGoal} ชม.)
               </Badge>
-              {onOpenAddSleep && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() =>
-                    onOpenAddSleep(
-                      activeDate,
-                      selectedPerson === "ALL" ? "ฝ่ายชาย" : selectedPerson
-                    )
-                  }
-                  className="text-[11px] h-7 px-2 text-sky-300 hover:text-white hover:bg-sky-600/20 border border-sky-500/30"
-                >
-                  <Moon className="h-3 w-3 mr-1" />
-                  จดเวลานอน
-                </Button>
-              )}
             </div>
           </CardHeader>
           <CardContent className="h-64 pt-2">
@@ -2364,14 +2296,6 @@ export function DashboardView({
           </div>
           <div className="flex items-center gap-2">
             <Button
-              onClick={() => onOpenAddMeal(activeDate)}
-              size="sm"
-              className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs flex items-center gap-1"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              + บันทึกมื้อ
-            </Button>
-            <Button
               variant="ghost"
               size="sm"
               onClick={onNavigateToMealPlan}
@@ -2390,13 +2314,6 @@ export function DashboardView({
                   ? `ยังไม่มีมื้ออาหารที่บันทึกไว้สำหรับ ${isAll ? "ทั้งคู่" : selectedPerson} ในวันนี้ (${formatThaiDate(activeDate)})`
                   : `ไม่มีมื้ออาหารที่บันทึกไว้สำหรับ ${isAll ? "ทั้งคู่" : selectedPerson} ในวันที่ ${formatThaiDate(activeDate)}`}
               </p>
-              <Button
-                onClick={() => onOpenAddMeal(activeDate)}
-                variant="outline"
-                className="mt-3 text-xs border-[#26334d] text-emerald-400 hover:bg-emerald-500/10"
-              >
-                + บันทึกมื้ออาหารของ{isToday ? "วันนี้" : "วันที่นี้"}
-              </Button>
             </div>
           ) : (
             <div className="space-y-4">
