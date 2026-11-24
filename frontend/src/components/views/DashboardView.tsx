@@ -32,6 +32,8 @@ import {
   Pencil,
   ChevronLeft,
   ChevronRight,
+  Moon,
+  Sun,
 } from "lucide-react"
 import {
   AllCalorieSettings,
@@ -44,6 +46,13 @@ import {
   analyzeProject,
 } from "@/lib/projectManager"
 import { getDailyStepLogs } from "@/lib/exerciseDatabase"
+import {
+  getSleepLogs,
+  calculateSleepDuration,
+  getSleepGoal,
+  evaluateSleepStatus,
+  isLateBedtime,
+} from "@/lib/sleepTracker"
 import { CalorieSettingsModal } from "@/components/modals/CalorieSettingsModal"
 import { ProjectReviewModal } from "@/components/modals/ProjectReviewModal"
 import { SetStepGoalModal } from "@/components/modals/SetStepGoalModal"
@@ -85,9 +94,11 @@ interface DashboardViewProps {
   onOpenAddMeal: (date?: string) => void
   onOpenAddWeight: () => void
   onOpenAddStep?: () => void
+  onOpenAddSleep?: (date?: string, person?: string) => void
   onToggleMealStatus: (id: string, currentStatus: string) => void
   onNavigateToMealPlan: () => void
   onNavigateToCalendar?: () => void
+  onNavigateToSleep?: () => void
 }
 
 export function DashboardView({
@@ -99,9 +110,11 @@ export function DashboardView({
   onOpenAddMeal,
   onOpenAddWeight,
   onOpenAddStep,
+  onOpenAddSleep,
   onToggleMealStatus,
   onNavigateToMealPlan,
   onNavigateToCalendar,
+  onNavigateToSleep,
 }: DashboardViewProps) {
   const isAll = selectedPerson === "ALL" || selectedPerson === "ทั้งหมด"
   const isMale = selectedPerson === "ฝ่ายชาย"
@@ -401,10 +414,11 @@ export function DashboardView({
     ],
   }
 
-  // 30-Day Intake Bar Chart
+  // Intake Bar Chart with Dynamic Timeframe Filter (7 / 14 / 30 days)
+  const [chartDaysRange, setChartDaysRange] = React.useState<7 | 14 | 30>(30)
   const last7Days: string[] = []
   const last7DaysLabels: string[] = []
-  for (let i = 29; i >= 0; i--) {
+  for (let i = chartDaysRange - 1; i >= 0; i--) {
     const d = new Date()
     d.setDate(d.getDate() - i)
     const iso = d.toLocaleDateString("en-CA")
@@ -644,6 +658,21 @@ export function DashboardView({
             </Button>
           )}
 
+          {onOpenAddSleep && (
+            <Button
+              onClick={() =>
+                onOpenAddSleep(
+                  activeDate,
+                  selectedPerson === "ALL" ? "ฝ่ายชาย" : selectedPerson
+                )
+              }
+              className="bg-sky-600 hover:bg-sky-500 text-white text-xs font-medium flex items-center gap-1.5 h-9 px-3 shadow-md shadow-sky-950"
+            >
+              <Moon className="h-4 w-4" />
+              + บันทึกเวลานอน
+            </Button>
+          )}
+
           <Button
             onClick={() => onOpenAddMeal(activeDate)}
             className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium flex items-center gap-1.5 h-9 px-3 shadow-md shadow-emerald-950"
@@ -714,6 +743,343 @@ export function DashboardView({
           />
         </div>
       </div>
+
+      {/* ⚡ HOLISTIC 4-PILLAR ROUTINE & ENERGY BALANCE CARD (ภาพรวมรูทีนลดน้ำหนัก & พลังงานรายวัน) */}
+      {(() => {
+        const allSteps = getDailyStepLogs()
+        const allSleep = getSleepLogs()
+        const targetPersonKey = isFemale ? "ฝ่ายหญิง" : "ฝ่ายชาย"
+
+        // Step stats for activeDate
+        const maleStepEntry = allSteps.find((s) => s.date === activeDate && s.person === "ฝ่ายชาย")
+        const femaleStepEntry = allSteps.find((s) => s.date === activeDate && s.person === "ฝ่ายหญิง")
+        const activeSteps = isAll
+          ? (maleStepEntry?.steps || 0) + (femaleStepEntry?.steps || 0)
+          : isFemale
+          ? femaleStepEntry?.steps || 0
+          : maleStepEntry?.steps || 0
+        const activeStepGoal = isAll
+          ? (maleSettings.stepGoal || 8000) + (femaleSettings.stepGoal || 8000)
+          : isFemale
+          ? femaleSettings.stepGoal || 8000
+          : maleSettings.stepGoal || 8000
+        const stepPct = Math.min(100, Math.round((activeSteps / Math.max(1, activeStepGoal)) * 100))
+
+        // Sleep stats for activeDate
+        const maleSleepEntry = allSleep.find((s) => s.date === activeDate && s.person === "ฝ่ายชาย")
+        const femaleSleepEntry = allSleep.find((s) => s.date === activeDate && s.person === "ฝ่ายหญิง")
+        const singleSleepEntry = isFemale ? femaleSleepEntry : maleSleepEntry
+        const singleSleepGoal = getSleepGoal(targetPersonKey)
+        const sleepEval = singleSleepEntry
+          ? evaluateSleepStatus(
+              singleSleepEntry.durationHours,
+              singleSleepEntry.sleepGoalHours || singleSleepGoal,
+              singleSleepEntry.bedTime,
+              singleSleepEntry.quality
+            )
+          : null
+
+        // Calculate 4-Pillar Routine & Energy Score (0-100)
+        // 1. Sleep (25 pts)
+        let sleepPillarScore = 0
+        if (isAll) {
+          const mEv = maleSleepEntry
+            ? evaluateSleepStatus(maleSleepEntry.durationHours, maleSleepEntry.sleepGoalHours || 8, maleSleepEntry.bedTime, maleSleepEntry.quality).energyScore
+            : 0
+          const fEv = femaleSleepEntry
+            ? evaluateSleepStatus(femaleSleepEntry.durationHours, femaleSleepEntry.sleepGoalHours || 8, femaleSleepEntry.bedTime, femaleSleepEntry.quality).energyScore
+            : 0
+          sleepPillarScore = Math.round(((mEv + fEv) / 200) * 25)
+        } else if (sleepEval) {
+          sleepPillarScore = Math.round((sleepEval.energyScore / 100) * 25)
+        }
+
+        // 2. Calorie Control (30 pts)
+        let calPillarScore = 0
+        if (totalCalories > 0) {
+          if (totalCalories <= TARGET_CALORIES) calPillarScore = 30
+          else if (totalCalories <= MAINTENANCE_CALORIES) calPillarScore = 18
+          else calPillarScore = 5
+        }
+
+        // 3. Protein Target (25 pts)
+        const proteinPct = Math.min(100, Math.round((totalProtein / Math.max(1, TARGET_PROTEIN)) * 100))
+        const protPillarScore = Math.round((proteinPct / 100) * 25)
+
+        // 4. Movement / Steps (20 pts)
+        const stepPillarScore = Math.round((stepPct / 100) * 20)
+
+        const totalRoutineScore = sleepPillarScore + calPillarScore + protPillarScore + stepPillarScore
+
+        // Actionable Coaching Advice for Today's Routine
+        const tips: string[] = []
+        if (!singleSleepEntry && !isAll) {
+          tips.push("🌙 จดเวลานอนเมื่อคืนเพื่อประเมินระดับฮอร์โมนและพลังงานวันนี้")
+        } else if (singleSleepEntry && isLateBedtime(singleSleepEntry.bedTime, 23, 30)) {
+          tips.push(`🌙 เมื่อคืนเข้านอนดึก (${singleSleepEntry.bedTime} น.) คืนนี้แนะนำตั้งเป้าเข้านอนก่อน 23:00 น. เพื่อกระตุ้น Growth Hormone`)
+        } else if (singleSleepEntry && singleSleepEntry.durationHours < 7) {
+          tips.push(`🪫 เมื่อคืนนอนเพียง ${singleSleepEntry.durationHours} ชม. วันนี้ควรดื่มน้ำเพิ่มและเน้นโปรตีนเพื่อลดอาการหิวของหวาน`)
+        }
+        if (totalProtein < TARGET_PROTEIN) {
+          tips.push(`🥩 เติมโปรตีนอีก ${(TARGET_PROTEIN - totalProtein).toFixed(0)} กรัม เพื่อรักษากล้ามเนื้อและทำให้อิ่มนานขึ้น`)
+        }
+        if (activeSteps < activeStepGoal) {
+          tips.push(`👟 เดินเพิ่มอีก ${(activeStepGoal - activeSteps).toLocaleString()} ก้าว (เช่น เดินย่อยหลังอาหาร 15-20 นาที) เพื่อเร่งเผาผลาญไขมัน`)
+        }
+        if (totalCalories > TARGET_CALORIES) {
+          tips.push(`⚠️ วันนี้แคลอรี่เกินเป้าตัดทอนไป ${Math.abs(calorieDiff).toLocaleString()} kcal แนะนำเดินเพิ่มหรือคุมมื้อถัดไปให้คลีน`)
+        }
+        if (tips.length === 0) {
+          tips.push("🌟 รูทีนทั้ง 4 เสาหลักของวันนี้สมบูรณ์แบบมาก! ทั้งการนอน โภชนาการ โปรตีน และการขยับตัวอยู่ในจุดที่เผาผลาญไขมันได้ดีที่สุด")
+        }
+
+        return (
+          <Card className="bg-gradient-to-br from-[#101829] via-[#131d31] to-[#171c34] border border-sky-500/40 shadow-xl overflow-hidden">
+            <CardHeader className="p-4 pb-3 border-b border-[#26334d] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <CardTitle className="text-base font-bold text-white flex items-center gap-2 flex-wrap">
+                  <Zap className="h-5 w-5 text-amber-400" />
+                  <span>เช็กลิสต์รูทีน 4 เสาหลักเพื่อลดน้ำหนัก & พลังงานที่ดี</span>
+                  <Badge className="bg-sky-500/20 text-sky-300 border-sky-500/30 text-[11px]">
+                    {isToday ? "รูทีนวันนี้" : formatThaiDate(activeDate)}
+                  </Badge>
+                </CardTitle>
+                <CardDescription className="text-xs text-slate-400">
+                  ประเมินความสมดุลระหว่าง การนอนหลับ • แคลอรี่ • โปรตีน • การขยับตัว ({isAll ? "รวมคู่รัก" : selectedPerson})
+                </CardDescription>
+              </div>
+
+              <div className="flex items-center gap-3 bg-[#0b0f19] px-3.5 py-2 rounded-xl border border-[#26334d]">
+                <div>
+                  <span className="text-[10px] text-slate-400 block">คะแนนรูทีน & พลังงาน</span>
+                  <span className="text-lg font-extrabold text-emerald-400 font-mono">
+                    {totalRoutineScore} <span className="text-xs font-normal text-slate-400">/ 100</span>
+                  </span>
+                </div>
+                <Badge
+                  className={`text-[11px] font-semibold ${
+                    totalRoutineScore >= 80
+                      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                      : totalRoutineScore >= 55
+                      ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                      : "bg-slate-800 text-slate-300 border-slate-700"
+                  }`}
+                >
+                  {totalRoutineScore >= 80
+                    ? "⚡ รูทีนยอดเยี่ยม"
+                    : totalRoutineScore >= 55
+                    ? "🔋 กำลังสะสมรูทีน"
+                    : "🌱 เริ่มต้นรูทีนวันนี้"}
+                </Badge>
+              </div>
+            </CardHeader>
+
+            <CardContent className="p-4 space-y-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                {/* Pillar 1: Sleep & Energy */}
+                <div className="p-3 rounded-xl bg-[#0b0f19] border border-sky-500/30 space-y-2 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-sky-300 flex items-center gap-1.5">
+                        <Moon className="h-3.5 w-3.5 text-sky-400" />
+                        1. การนอน & ฟื้นฟู
+                      </span>
+                      <span className="text-[10px] font-mono text-sky-400 font-bold">
+                        {sleepPillarScore}/25 คะแนน
+                      </span>
+                    </div>
+                    <div className="mt-1.5">
+                      {isAll ? (
+                        <div className="text-xs text-white font-mono space-y-0.5">
+                          <div>
+                            🏋️‍♂️ ชาย:{" "}
+                            {maleSleepEntry
+                              ? `${maleSleepEntry.bedTime}-${maleSleepEntry.wakeTime} (${maleSleepEntry.durationHours}ชม.)`
+                              : "ยังไม่จด"}
+                          </div>
+                          <div>
+                            🧘‍♀️ หญิง:{" "}
+                            {femaleSleepEntry
+                              ? `${femaleSleepEntry.bedTime}-${femaleSleepEntry.wakeTime} (${femaleSleepEntry.durationHours}ชม.)`
+                              : "ยังไม่จด"}
+                          </div>
+                        </div>
+                      ) : singleSleepEntry ? (
+                        <div>
+                          <div className="text-sm font-extrabold text-white font-mono">
+                            {calculateSleepDuration(singleSleepEntry.bedTime, singleSleepEntry.wakeTime).formatted}
+                          </div>
+                          <span className="text-[11px] text-slate-400 font-mono">
+                            🌙 {singleSleepEntry.bedTime} ➔ ☀️ {singleSleepEntry.wakeTime} น.
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-slate-500 py-1">ยังไม่ได้บันทึกเวลานอนวันนี้</div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between pt-1 border-t border-[#26334d]/60">
+                    <span className="text-[10px] text-slate-400">
+                      {sleepEval ? sleepEval.label : "เป้า 7.5 - 8 ชม."}
+                    </span>
+                    {onOpenAddSleep && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenAddSleep(activeDate, targetPersonKey)}
+                        className="text-[10px] text-sky-300 hover:text-white bg-sky-500/15 hover:bg-sky-600 px-2 py-0.5 rounded border border-sky-500/30 transition-all"
+                      >
+                        {singleSleepEntry ? "แก้ไขเวลา" : "+ จดเวลานอน"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Pillar 2: Calorie Deficit */}
+                <div className="p-3 rounded-xl bg-[#0b0f19] border border-emerald-500/30 space-y-2 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-emerald-300 flex items-center gap-1.5">
+                        <Flame className="h-3.5 w-3.5 text-emerald-400" />
+                        2. คุมแคลอรี่ลดไขมัน
+                      </span>
+                      <span className="text-[10px] font-mono text-emerald-400 font-bold">
+                        {calPillarScore}/30 คะแนน
+                      </span>
+                    </div>
+                    <div className="mt-1.5">
+                      <div className="text-sm font-extrabold text-white font-mono">
+                        {totalCalories.toLocaleString()}{" "}
+                        <span className="text-[11px] font-normal text-slate-400">
+                          / {TARGET_CALORIES.toLocaleString()} kcal
+                        </span>
+                      </div>
+                      <span
+                        className={`text-[11px] font-mono ${
+                          calorieDiff >= 0 ? "text-emerald-400" : "text-rose-400"
+                        }`}
+                      >
+                        {calorieDiff >= 0
+                          ? `เหลือโควต้า ${calorieDiff.toLocaleString()} kcal`
+                          : `เกินโควต้า +${Math.abs(calorieDiff).toLocaleString()} kcal`}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between pt-1 border-t border-[#26334d]/60">
+                    <span className="text-[10px] text-slate-400">
+                      ตัดทอนวันนี้:{" "}
+                      {MAINTENANCE_CALORIES - totalCalories >= 0
+                        ? `-${(MAINTENANCE_CALORIES - totalCalories).toLocaleString()} kcal`
+                        : "เกินเมนเทน"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onOpenAddMeal(activeDate)}
+                      className="text-[10px] text-emerald-300 hover:text-white bg-emerald-500/15 hover:bg-emerald-600 px-2 py-0.5 rounded border border-emerald-500/30 transition-all"
+                    >
+                      + จดมื้ออาหาร
+                    </button>
+                  </div>
+                </div>
+
+                {/* Pillar 3: Protein Satiety */}
+                <div className="p-3 rounded-xl bg-[#0b0f19] border border-amber-500/30 space-y-2 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-amber-300 flex items-center gap-1.5">
+                        <Beef className="h-3.5 w-3.5 text-amber-400" />
+                        3. โปรตีน & อิ่มนาน
+                      </span>
+                      <span className="text-[10px] font-mono text-amber-400 font-bold">
+                        {protPillarScore}/25 คะแนน
+                      </span>
+                    </div>
+                    <div className="mt-1.5">
+                      <div className="text-sm font-extrabold text-white font-mono">
+                        {totalProtein.toFixed(1)}g{" "}
+                        <span className="text-[11px] font-normal text-slate-400">
+                          / {TARGET_PROTEIN}g ({proteinPct}%)
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-800 rounded-full h-1.5 mt-1.5 overflow-hidden">
+                        <div
+                          className="bg-amber-400 h-1.5 rounded-full transition-all"
+                          style={{ width: `${proteinPct}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between pt-1 border-t border-[#26334d]/60 text-[10px] text-slate-400">
+                    <span>
+                      {totalProtein >= TARGET_PROTEIN
+                        ? "✅ โปรตีนครบเป้าแล้ว"
+                        : `ขาดอีก ${(TARGET_PROTEIN - totalProtein).toFixed(0)}g`}
+                    </span>
+                    <span>รักษามวลกล้ามเนื้อ</span>
+                  </div>
+                </div>
+
+                {/* Pillar 4: Daily Steps & NEAT */}
+                <div className="p-3 rounded-xl bg-[#0b0f19] border border-indigo-500/30 space-y-2 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-indigo-300 flex items-center gap-1.5">
+                        <Footprints className="h-3.5 w-3.5 text-indigo-400" />
+                        4. ก้าวเดิน & ขยับตัว
+                      </span>
+                      <span className="text-[10px] font-mono text-indigo-400 font-bold">
+                        {stepPillarScore}/20 คะแนน
+                      </span>
+                    </div>
+                    <div className="mt-1.5">
+                      <div className="text-sm font-extrabold text-white font-mono">
+                        {activeSteps.toLocaleString()}{" "}
+                        <span className="text-[11px] font-normal text-slate-400">
+                          / {activeStepGoal.toLocaleString()} ก้าว ({stepPct}%)
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-800 rounded-full h-1.5 mt-1.5 overflow-hidden">
+                        <div
+                          className="bg-indigo-400 h-1.5 rounded-full transition-all"
+                          style={{ width: `${stepPct}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between pt-1 border-t border-[#26334d]/60">
+                    <span className="text-[10px] text-slate-400">
+                      เผาผลาญ ~{Math.round(activeSteps * 0.035)} kcal
+                    </span>
+                    {onOpenAddStep && (
+                      <button
+                        type="button"
+                        onClick={onOpenAddStep}
+                        className="text-[10px] text-indigo-300 hover:text-white bg-indigo-500/15 hover:bg-indigo-600 px-2 py-0.5 rounded border border-indigo-500/30 transition-all"
+                      >
+                        + กรอกก้าว
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Actionable Daily Routine Advice */}
+              <div className="p-3 rounded-xl bg-[#0b0f19]/90 border border-indigo-500/30 flex items-start gap-2.5 text-xs">
+                <Lightbulb className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <strong className="text-white block">
+                    คำแนะนำปรับรูทีนประจำวันเพื่อให้ลดน้ำหนักได้ดีและมีพลังงานสดชื่น:
+                  </strong>
+                  <ul className="space-y-0.5 text-slate-300">
+                    {tips.map((tip, i) => (
+                      <li key={i}>{tip}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )
+      })()}
 
       {/* 🏆 FEATURE: COUPLE ADHERENCE COMPARISON CARD (WHO IS DOING BETTER?) */}
       {isAll && (
@@ -1156,8 +1522,8 @@ export function DashboardView({
             );
           })()}
 
-          {/* 💡 Quick Retrospective Summary Bar (ตอบโจทย์: กินเกินไหม / ออกกำลังกาย / ปรับตัว) */}
-          <div className="p-3.5 rounded-xl bg-gradient-to-r from-[#0d1527] to-[#121c33] border border-indigo-500/30 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+          {/* 💡 Quick Retrospective Summary Bar (ตอบโจทย์: กินเกินไหม / ออกกำลังกาย / เวลานอน / ปรับตัว) */}
+          <div className="p-3.5 rounded-xl bg-gradient-to-r from-[#0d1527] to-[#121c33] border border-indigo-500/30 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
             <div className="flex items-center gap-2">
               <Flame className="h-4 w-4 text-orange-400 shrink-0" />
               <div>
@@ -1190,9 +1556,8 @@ export function DashboardView({
                   <strong className="text-indigo-300 font-mono">
                     {(() => {
                       const allStepLogs = getDailyStepLogs()
-                      const todayStr = new Date().toLocaleDateString("en-CA")
                       const target = activeProject?.targetDailySteps || (isFemale ? femaleSettings.stepGoal : maleSettings.stepGoal) || 8000
-                      const pLog = allStepLogs.find((s) => s.date === todayStr && (isAll || s.person === (isFemale ? "ฝ่ายหญิง" : "ฝ่ายชาย")))
+                      const pLog = allStepLogs.find((s) => s.date === activeDate && (isAll || s.person === (isFemale ? "ฝ่ายหญิง" : "ฝ่ายชาย")))
                       if (pLog) {
                         return `${Number(pLog.steps).toLocaleString()} ก้าว ${Number(pLog.steps) >= target ? "✅ ถึงเป้า" : `(ขาดอีก ${(target - Number(pLog.steps)).toLocaleString()})`}`
                       }
@@ -1212,7 +1577,64 @@ export function DashboardView({
               )}
             </div>
 
+            {/* Sleep & Wake Time Status */}
+            <div className="flex items-center justify-between sm:justify-start gap-2">
+              <div className="flex items-center gap-2">
+                <Moon className="h-4 w-4 text-sky-400 shrink-0" />
+                <div>
+                  <span className="text-slate-400 block text-[11px]">
+                    เวลานอน / ตื่น ({isToday ? "วันนี้" : formatThaiDate(activeDate)})
+                  </span>
+                  <strong className="text-sky-300 font-mono">
+                    {(() => {
+                      const allSleep = getSleepLogs()
+                      if (isAll) {
+                        const mSleep = allSleep.find((s) => s.date === activeDate && s.person === "ฝ่ายชาย")
+                        const fSleep = allSleep.find((s) => s.date === activeDate && s.person === "ฝ่ายหญิง")
+                        if (!mSleep && !fSleep) return "วันนี้ยังไม่บันทึกเวลานอน"
+                        const mText = mSleep ? `ชาย ${mSleep.durationHours}ชม.` : "ชาย -"
+                        const fText = fSleep ? `หญิง ${fSleep.durationHours}ชม.` : "หญิง -"
+                        return `${mText} • ${fText}`
+                      }
+                      const targetP = isFemale ? "ฝ่ายหญิง" : "ฝ่ายชาย"
+                      const pSleep = allSleep.find((s) => s.date === activeDate && s.person === targetP)
+                      if (pSleep) {
+                        const dur = calculateSleepDuration(pSleep.bedTime, pSleep.wakeTime)
+                        return `🌙${pSleep.bedTime} ➔ ☀️${pSleep.wakeTime} (${dur.shortFormatted})`
+                      }
+                      return "วันนี้ยังไม่บันทึกเวลานอน"
+                    })()}
+                  </strong>
+                </div>
+              </div>
+              {onOpenAddSleep && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onOpenAddSleep(
+                      activeDate,
+                      isFemale ? "ฝ่ายหญิง" : "ฝ่ายชาย"
+                    )
+                  }
+                  className="text-[10px] bg-sky-600/20 text-sky-300 hover:bg-sky-600 hover:text-white px-2.5 py-1 rounded-md border border-sky-500/30 font-medium transition-all shrink-0 ml-auto sm:ml-2"
+                >
+                  + เวลานอน
+                </button>
+              )}
+            </div>
+
             <div className="flex items-center justify-between sm:justify-end gap-2 flex-wrap">
+              {onNavigateToSleep && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={onNavigateToSleep}
+                  className="text-xs text-sky-400 hover:text-white hover:bg-sky-500/20 flex items-center gap-1 p-0 h-auto font-medium"
+                >
+                  <span>😴 สถิติการนอน</span>
+                  <ArrowRight className="h-3 w-3" />
+                </Button>
+              )}
               {onNavigateToCalendar && (
                 <Button
                   size="sm"
@@ -1230,7 +1652,7 @@ export function DashboardView({
                 onClick={() => setProjectModalOpen(true)}
                 className="text-xs text-amber-300 hover:text-white hover:bg-amber-500/20 flex items-center gap-1 p-0 h-auto font-medium"
               >
-                <span>💡 บทเรียนและข้อแนะนำ</span>
+                <span>💡 บทเรียน</span>
                 <ArrowRight className="h-3 w-3" />
               </Button>
             </div>
@@ -1564,12 +1986,12 @@ export function DashboardView({
           </CardContent>
         </Card>
 
-        {/* 30-Day Trend Bar Chart */}
+        {/* Dynamic Trend Bar Chart (7 / 14 / 30 Days) */}
         <Card className="lg:col-span-2 bg-[#151d2f] border-[#26334d]">
           <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
               <CardTitle className="text-base font-semibold text-white flex items-center gap-2 flex-wrap">
-                <span>แคลอรี่ 30 วันล่าสุด ({selectedPerson})</span>
+                <span>แคลอรี่ {chartDaysRange} วันล่าสุด ({selectedPerson})</span>
                 <Badge
                   variant="outline"
                   className={
@@ -1584,10 +2006,27 @@ export function DashboardView({
                 </Badge>
               </CardTitle>
               <CardDescription className="text-slate-400 text-xs mt-0.5">
-                แนวโน้มการรับประทานอาหาร 30 วันล่าสุด เปรียบเทียบเป้าหมาย {TARGET_CALORIES.toLocaleString()} kcal
+                แนวโน้มการรับประทานอาหาร {chartDaysRange} วันล่าสุด เปรียบเทียบเป้าหมาย {TARGET_CALORIES.toLocaleString()} kcal
               </CardDescription>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
+              {/* Timeframe Switcher */}
+              <div className="flex items-center gap-1 bg-[#0b0f19] p-1 rounded-lg border border-[#26334d]">
+                {([7, 14, 30] as const).map((days) => (
+                  <button
+                    key={days}
+                    type="button"
+                    onClick={() => setChartDaysRange(days)}
+                    className={`px-2 py-0.5 rounded text-[11px] font-medium transition-all ${
+                      chartDaysRange === days
+                        ? "bg-emerald-600 text-white font-semibold"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    {days} วัน
+                  </button>
+                ))}
+              </div>
               <Badge variant="outline" className="border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
                 นน. ล่าสุด: {currentWeight} kg (เป้า {ULTIMATE_TARGET_WEIGHT} kg)
               </Badge>

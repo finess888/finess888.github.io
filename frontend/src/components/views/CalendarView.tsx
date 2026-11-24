@@ -33,10 +33,12 @@ import {
   Droplet,
   Users,
   Heart,
+  Moon,
 } from "lucide-react"
 import { formatThaiDate, THAI_MONTHS, THAI_DAYS } from "@/lib/utils"
 import { getCalorieSettings, getIntakeTarget } from "@/lib/calorieSettings"
 import { getDailyStepLogs, DailyStepLog } from "@/lib/exerciseDatabase"
+import { getSleepLogs, SleepLogEntry, calculateSleepDuration } from "@/lib/sleepTracker"
 
 interface CalendarViewProps {
   meals: any[]
@@ -47,9 +49,10 @@ interface CalendarViewProps {
   onOpenAddMeal?: (date?: string, person?: string) => void
   onOpenAddStep?: (date?: string) => void
   onOpenAddWeight?: (date?: string) => void
+  onOpenAddSleep?: (date?: string, person?: string) => void
 }
 
-type CriteriaType = "calories" | "steps" | "protein" | "all"
+type CriteriaType = "calories" | "steps" | "protein" | "sleep" | "all"
 
 interface PersonDayStats {
   meals: any[]
@@ -63,6 +66,7 @@ interface PersonDayStats {
   targetProtein: number
   stepCount: number
   weight: number | null
+  sleepLog: SleepLogEntry | null
   calorieDiff: number // target - actual
   maintenanceDiff: number // maintenance - actual
   status: "good" | "maintain" | "bad" | "unrecorded" | "future"
@@ -105,6 +109,7 @@ export function CalendarView({
   onOpenAddMeal,
   onOpenAddStep,
   onOpenAddWeight,
+  onOpenAddSleep,
 }: CalendarViewProps) {
   const today = new Date()
   const todayStr = today.toLocaleDateString("en-CA") // YYYY-MM-DD in local time
@@ -176,6 +181,7 @@ export function CalendarView({
   const evaluatePersonDay = (
     personMeals: any[],
     stepCount: number,
+    sleepLog: SleepLogEntry | null,
     targetCal: number,
     maintenanceCal: number,
     targetStep: number,
@@ -189,6 +195,7 @@ export function CalendarView({
     const overMaintenance = maintenanceCal > targetCal ? Math.abs(maintenanceDiff) : Math.abs(diff)
     const hasMeals = personMeals.length > 0
     const hasSteps = stepCount > 0
+    const hasSleep = !!sleepLog
 
     if (isFuture) {
       return { status: "future", statusLabel: "รอสรุป", statusReason: "ยังไม่ถึงวัน" }
@@ -214,6 +221,9 @@ export function CalendarView({
       if (stepCount >= targetStep) {
         return { status: "good", statusLabel: "ครบก้าว ✅", statusReason: `เดินได้ ${stepCount.toLocaleString()} / เป้า ${targetStep.toLocaleString()} ก้าว` }
       }
+      if (stepCount >= targetStep * 0.75) {
+        return { status: "maintain", statusLabel: "เกือบครบ 🟡", statusReason: `เดินได้ ${stepCount.toLocaleString()} ก้าว (ขาด ${(targetStep - stepCount).toLocaleString()})` }
+      }
       return { status: "bad", statusLabel: "ขาดก้าว ❌", statusReason: `ขาดอีก ${(targetStep - stepCount).toLocaleString()} ก้าว` }
     }
 
@@ -224,18 +234,51 @@ export function CalendarView({
       if (totalProt >= targetProt) {
         return { status: "good", statusLabel: "โปรตีนถึง ✅", statusReason: `ได้โปรตีน ${totalProt.toFixed(1)}g / เป้า ${targetProt}g` }
       }
+      if (totalProt >= targetProt * 0.8) {
+        return { status: "maintain", statusLabel: "เกือบถึง 🟡", statusReason: `ได้โปรตีน ${totalProt.toFixed(1)}g (ขาด ${(targetProt - totalProt).toFixed(1)}g)` }
+      }
       return { status: "bad", statusLabel: "ขาดโปรตีน ❌", statusReason: `ขาดอีก ${(targetProt - totalProt).toFixed(1)}g` }
     }
 
-    // Criteria: "all"
-    if (!hasMeals) {
-      return { status: "unrecorded", statusLabel: "ยังไม่จด", statusReason: "ยังไม่มีบันทึกอาหาร" }
-    }
-    if (totalCal <= targetCal) {
-      if (stepCount >= targetStep || totalProt >= targetProt) {
-        return { status: "good", statusLabel: "ดีเยี่ยม 🌟", statusReason: "คุมแคลอรี่ได้ดีและถึงเป้ากิจกรรม/โปรตีน" }
+    if (criteria === "sleep") {
+      if (!hasSleep || !sleepLog) {
+        return { status: "unrecorded", statusLabel: "ยังไม่จด", statusReason: "ยังไม่มีบันทึกเวลานอน" }
       }
-      return { status: "good", statusLabel: "คุมดี ✅", statusReason: "แคลอรี่อยู่ในโควต้า" }
+      const sleepGoal = sleepLog.sleepGoalHours || 7.5
+      if (sleepLog.durationHours >= sleepGoal) {
+        return {
+          status: "good",
+          statusLabel: "นอนพอ ✅",
+          statusReason: `นอน ${sleepLog.durationHours} ชม. (${sleepLog.bedTime}-${sleepLog.wakeTime})`,
+        }
+      }
+      if (sleepLog.durationHours >= 6) {
+        return {
+          status: "maintain",
+          statusLabel: "ปานกลาง 🟡",
+          statusReason: `นอน ${sleepLog.durationHours} ชม. (เป้า ${sleepGoal} ชม.)`,
+        }
+      }
+      return {
+        status: "bad",
+        statusLabel: "นอนน้อย ❌",
+        statusReason: `นอนเพียง ${sleepLog.durationHours} ชม. (< 6 ชม.)`,
+      }
+    }
+
+    // Criteria: "all" (ครบสูตรรูทีน: โภชนาการ + โปรตีน/ก้าวเดิน + การนอน)
+    if (!hasMeals && !hasSteps && !hasSleep) {
+      return { status: "unrecorded", statusLabel: "ยังไม่จด", statusReason: "ยังไม่มีบันทึกรูทีน" }
+    }
+    if (!hasMeals) {
+      return { status: "unrecorded", statusLabel: "รอจดอาหาร", statusReason: "ยังไม่มีบันทึกอาหาร" }
+    }
+    const sleepOk = !sleepLog || sleepLog.durationHours >= 6.5
+    if (totalCal <= targetCal) {
+      if ((stepCount >= targetStep || totalProt >= targetProt) && sleepOk) {
+        return { status: "good", statusLabel: "รูทีนดีเยี่ยม 🌟", statusReason: "คุมแคลอรี่ดี + กิจกรรม/โปรตีน/การนอนสมดุล" }
+      }
+      return { status: "good", statusLabel: "คุมดี ✅", statusReason: "แคลอรี่อยู่ในโควต้าลดไขมัน" }
     }
     if (maintenanceCal > targetCal && totalCal <= maintenanceCal) {
       return { status: "maintain", statusLabel: "ประคอง 🟡", statusReason: `เกินเป้าตัด +${Math.abs(diff).toLocaleString()} kcal (ไม่เกินเมนเทน ${maintenanceCal.toLocaleString()})` }
@@ -247,6 +290,7 @@ export function CalendarView({
   const monthDays: DayData[] = React.useMemo(() => {
     const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate()
     const allStepLogs = getDailyStepLogs()
+    const allSleepLogs = getSleepLogs()
 
     const result: DayData[] = []
 
@@ -278,10 +322,13 @@ export function CalendarView({
       const dayHealth = healthLogs.find((h) => String(h.date || h.Date || "").split("T")[0] === dateStr)
       const maleWeight = dayHealth?.maleWeight || null
       const femaleWeight = dayHealth?.femaleWeight || null
+      const maleSleep = allSleepLogs.find((s) => s.date === dateStr && s.person === "ฝ่ายชาย") || null
+      const femaleSleep = allSleepLogs.find((s) => s.date === dateStr && s.person === "ฝ่ายหญิง") || null
 
       const maleEval = evaluatePersonDay(
         maleMeals,
         maleSteps,
+        maleSleep,
         maleTargetIntake,
         maleSettings.maintenance || maleTargetIntake,
         maleStepTarget,
@@ -302,6 +349,7 @@ export function CalendarView({
         targetProtein: maleProteinTarget,
         stepCount: maleSteps,
         weight: maleWeight,
+        sleepLog: maleSleep,
         calorieDiff: maleTargetIntake - maleCals,
         maintenanceDiff: maleMaintenanceCal - maleCals,
         status: maleEval.status,
@@ -327,6 +375,7 @@ export function CalendarView({
       const femaleEval = evaluatePersonDay(
         femaleMeals,
         femaleSteps,
+        femaleSleep,
         femaleTargetIntake,
         femaleSettings.maintenance || femaleTargetIntake,
         femaleStepTarget,
@@ -347,6 +396,7 @@ export function CalendarView({
         targetProtein: femaleProteinTarget,
         stepCount: femaleSteps,
         weight: femaleWeight,
+        sleepLog: femaleSleep,
         calorieDiff: femaleTargetIntake - femaleCals,
         maintenanceDiff: femaleMaintenanceCal - femaleCals,
         status: femaleEval.status,
@@ -836,10 +886,10 @@ export function CalendarView({
           </Button>
         </div>
 
-        {/* Criteria Selection: แคลอรี่ / ก้าวเดิน / โปรตีน / รวม */}
-        <div className="flex items-center gap-1 bg-[#0b0f19] p-1 rounded-lg border border-[#26334d] text-xs">
+        {/* Criteria Selection: แคลอรี่ / ก้าวเดิน / โปรตีน / การนอน / รวม */}
+        <div className="flex items-center gap-1 bg-[#0b0f19] p-1 rounded-lg border border-[#26334d] text-xs flex-wrap">
           <span className="text-[11px] text-slate-400 px-2 font-medium hidden sm:inline">
-            เกณฑ์ดี/ร้าย:
+            กรองรูทีนดี/ร้าย:
           </span>
           <button
             type="button"
@@ -876,6 +926,18 @@ export function CalendarView({
           >
             <Beef className="h-3 w-3" />
             <span>โปรตีน</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setCriteria("sleep")}
+            className={`px-2.5 py-1 rounded-md transition-all font-medium flex items-center gap-1 ${
+              criteria === "sleep"
+                ? "bg-sky-600 text-white font-semibold shadow-sm"
+                : "text-slate-400 hover:text-white"
+            }`}
+          >
+            <Moon className="h-3 w-3" />
+            <span>การนอน</span>
           </button>
           <button
             type="button"
@@ -1040,7 +1102,25 @@ export function CalendarView({
                     >
                       <span className="flex items-center gap-0.5 sm:gap-1 font-semibold truncate">
                         <span>🏋️‍♂️</span>
-                        {day.male.totalCalories > 0 ? (
+                        {criteria === "steps" ? (
+                          day.male.stepCount > 0 ? (
+                            <span>{day.male.stepCount.toLocaleString()}ก้าว</span>
+                          ) : (
+                            <span className="text-slate-600">--</span>
+                          )
+                        ) : criteria === "protein" ? (
+                          day.male.totalProtein > 0 ? (
+                            <span>{day.male.totalProtein}g</span>
+                          ) : (
+                            <span className="text-slate-600">--</span>
+                          )
+                        ) : criteria === "sleep" ? (
+                          day.male.sleepLog ? (
+                            <span>{day.male.sleepLog.durationHours}ชม.</span>
+                          ) : (
+                            <span className="text-slate-600">--</span>
+                          )
+                        ) : day.male.totalCalories > 0 ? (
                           <span>{day.male.totalCalories.toLocaleString()}</span>
                         ) : (
                           <span className="text-slate-600">--</span>
@@ -1065,7 +1145,25 @@ export function CalendarView({
                     >
                       <span className="flex items-center gap-0.5 sm:gap-1 font-semibold truncate">
                         <span>🧘‍♀️</span>
-                        {day.female.totalCalories > 0 ? (
+                        {criteria === "steps" ? (
+                          day.female.stepCount > 0 ? (
+                            <span>{day.female.stepCount.toLocaleString()}ก้าว</span>
+                          ) : (
+                            <span className="text-slate-600">--</span>
+                          )
+                        ) : criteria === "protein" ? (
+                          day.female.totalProtein > 0 ? (
+                            <span>{day.female.totalProtein}g</span>
+                          ) : (
+                            <span className="text-slate-600">--</span>
+                          )
+                        ) : criteria === "sleep" ? (
+                          day.female.sleepLog ? (
+                            <span>{day.female.sleepLog.durationHours}ชม.</span>
+                          ) : (
+                            <span className="text-slate-600">--</span>
+                          )
+                        ) : day.female.totalCalories > 0 ? (
                           <span>{day.female.totalCalories.toLocaleString()}</span>
                         ) : (
                           <span className="text-slate-600">--</span>
@@ -1077,44 +1175,90 @@ export function CalendarView({
                     </div>
                   </div>
                 ) : (
-                  /* Single Person Mid Section */
+                  /* Single Person Mid Section (Dynamic by criteria) */
                   <div className="my-1 space-y-0.5">
-                    {day.activeCalories > 0 ? (
-                      <div>
-                        <div
-                          className={`text-[11px] sm:text-xs font-mono font-bold leading-tight ${
-                            day.activeStatus === "good"
-                              ? "text-emerald-300"
-                              : day.activeStatus === "maintain"
-                              ? "text-amber-300"
-                              : "text-rose-400"
-                          }`}
-                        >
-                          {day.activeCalories.toLocaleString()}
-                          <span className="text-[9px] sm:text-[10px] text-slate-400 font-normal">
-                            {" "}
-                            / {day.activeTargetCalories.toLocaleString()}
-                          </span>
-                        </div>
-                        <div className="text-[9px] sm:text-[10px] leading-none">
-                          <span
-                            className={
+                    {(() => {
+                      const pStats = isFemale ? day.female : day.male
+                      if (criteria === "steps") {
+                        return pStats.stepCount > 0 ? (
+                          <div>
+                            <div className="text-[11px] sm:text-xs font-mono font-bold text-indigo-300 leading-tight">
+                              {pStats.stepCount.toLocaleString()}
+                              <span className="text-[9px] text-slate-400 font-normal"> ก้าว</span>
+                            </div>
+                            <div className="text-[9px] text-slate-400">
+                              เป้า {pStats.targetSteps.toLocaleString()}
+                            </div>
+                          </div>
+                        ) : !isFuture ? (
+                          <span className="text-[9px] sm:text-[10px] text-slate-500">ไม่ได้จดก้าว</span>
+                        ) : null
+                      }
+                      if (criteria === "protein") {
+                        return pStats.totalProtein > 0 ? (
+                          <div>
+                            <div className="text-[11px] sm:text-xs font-mono font-bold text-amber-300 leading-tight">
+                              {pStats.totalProtein}g
+                              <span className="text-[9px] text-slate-400 font-normal">
+                                {" "}/ {pStats.targetProtein}g
+                              </span>
+                            </div>
+                          </div>
+                        ) : !isFuture ? (
+                          <span className="text-[9px] sm:text-[10px] text-slate-500">ไม่ได้จดโปรตีน</span>
+                        ) : null
+                      }
+                      if (criteria === "sleep") {
+                        return pStats.sleepLog ? (
+                          <div>
+                            <div className="text-[11px] sm:text-xs font-mono font-bold text-sky-300 leading-tight">
+                              {pStats.sleepLog.durationHours} ชม.
+                            </div>
+                            <div className="text-[9px] text-slate-400 font-mono">
+                              {pStats.sleepLog.bedTime}-{pStats.sleepLog.wakeTime}
+                            </div>
+                          </div>
+                        ) : !isFuture ? (
+                          <span className="text-[9px] sm:text-[10px] text-slate-500">ไม่ได้จดเวลานอน</span>
+                        ) : null
+                      }
+                      return day.activeCalories > 0 ? (
+                        <div>
+                          <div
+                            className={`text-[11px] sm:text-xs font-mono font-bold leading-tight ${
                               day.activeStatus === "good"
-                                ? "text-emerald-400"
+                                ? "text-emerald-300"
                                 : day.activeStatus === "maintain"
-                                ? "text-amber-400 font-semibold"
-                                : "text-rose-400 font-semibold"
-                            }
+                                ? "text-amber-300"
+                                : "text-rose-400"
+                            }`}
                           >
-                            {day.activeMaintenanceDiff <= 0
-                              ? `+${Math.abs(day.activeMaintenanceDiff).toLocaleString()} kcal`
-                              : `-${day.activeMaintenanceDiff.toLocaleString()} kcal`}
-                          </span>
+                            {day.activeCalories.toLocaleString()}
+                            <span className="text-[9px] sm:text-[10px] text-slate-400 font-normal">
+                              {" "}
+                              / {day.activeTargetCalories.toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="text-[9px] sm:text-[10px] leading-none">
+                            <span
+                              className={
+                                day.activeStatus === "good"
+                                  ? "text-emerald-400"
+                                  : day.activeStatus === "maintain"
+                                  ? "text-amber-400 font-semibold"
+                                  : "text-rose-400 font-semibold"
+                              }
+                            >
+                              {day.activeMaintenanceDiff <= 0
+                                ? `+${Math.abs(day.activeMaintenanceDiff).toLocaleString()} kcal`
+                                : `-${day.activeMaintenanceDiff.toLocaleString()} kcal`}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    ) : !isFuture ? (
-                      <span className="text-[9px] sm:text-[10px] text-slate-500">ไม่ได้จดอาหาร</span>
-                    ) : null}
+                      ) : !isFuture ? (
+                        <span className="text-[9px] sm:text-[10px] text-slate-500">ไม่ได้จดอาหาร</span>
+                      ) : null
+                    })()}
                   </div>
                 )}
 
@@ -1129,6 +1273,11 @@ export function CalendarView({
                     {day.male.stepCount + day.female.stepCount > 0 && (
                       <span className="text-indigo-400 font-mono text-[9px] sm:text-[10px]" title="ก้าวเดิน">
                         👟
+                      </span>
+                    )}
+                    {(day.male.sleepLog || day.female.sleepLog) && (
+                      <span className="text-sky-400 font-mono text-[9px] sm:text-[10px]" title="บันทึกเวลานอนแล้ว">
+                        😴
                       </span>
                     )}
                   </div>
@@ -1271,28 +1420,44 @@ export function CalendarView({
             {/* Section: Both View (Split Cards) */}
             {(detailTab === "both" || detailTab === "male") && (
               <div className="space-y-2 p-3 rounded-xl bg-[#0d1527] border border-emerald-500/30">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-1">
                   <div className="flex items-center gap-1.5 font-bold text-emerald-400 text-sm">
                     <span>🏋️‍♂️</span>
                     <span>ฝ่ายชาย: {selectedDay.male.statusLabel}</span>
                   </div>
-                  {onOpenAddMeal && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setDayModalOpen(false)
-                        onOpenAddMeal(selectedDay.dateStr, "ฝ่ายชาย")
-                      }}
-                      className="h-6 text-[11px] border-emerald-500/40 text-emerald-300 hover:bg-emerald-600 hover:text-white px-2"
-                    >
-                      <Plus className="h-3 w-3 mr-1" />
-                      เพิ่มอาหารชาย
-                    </Button>
-                  )}
+                  <div className="flex items-center gap-1.5">
+                    {onOpenAddSleep && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setDayModalOpen(false)
+                          onOpenAddSleep(selectedDay.dateStr, "ฝ่ายชาย")
+                        }}
+                        className="h-6 text-[11px] border-sky-500/40 text-sky-300 hover:bg-sky-600 hover:text-white px-2"
+                      >
+                        <Moon className="h-3 w-3 mr-1" />
+                        เวลานอนชาย
+                      </Button>
+                    )}
+                    {onOpenAddMeal && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setDayModalOpen(false)
+                          onOpenAddMeal(selectedDay.dateStr, "ฝ่ายชาย")
+                        }}
+                        className="h-6 text-[11px] border-emerald-500/40 text-emerald-300 hover:bg-emerald-600 hover:text-white px-2"
+                      >
+                        <Plus className="h-3 w-3 mr-1" />
+                        เพิ่มอาหารชาย
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-4 gap-2 text-center font-mono text-xs">
+                <div className="grid grid-cols-5 gap-2 text-center font-mono text-xs">
                   <div className="p-2 rounded-lg bg-[#0b0f19] border border-[#26334d]">
                     <span className="text-[10px] text-slate-400 block font-sans">แคลอรี่</span>
                     <strong className={selectedDay.male.calorieDiff >= 0 ? "text-emerald-400" : "text-rose-400"}>
@@ -1315,6 +1480,22 @@ export function CalendarView({
                     <strong className="text-cyan-300">{selectedDay.male.weight ? `${selectedDay.male.weight} kg` : "--"}</strong>
                     <span className="text-[9px] text-slate-500 block">ชั่งเช้า</span>
                   </div>
+                  <div className="p-2 rounded-lg bg-[#0b0f19] border border-[#26334d]">
+                    <span className="text-[10px] text-slate-400 block font-sans">เวลานอน</span>
+                    <strong className="text-sky-300">
+                      {selectedDay.male.sleepLog
+                        ? calculateSleepDuration(
+                            selectedDay.male.sleepLog.bedTime,
+                            selectedDay.male.sleepLog.wakeTime
+                          ).shortFormatted
+                        : "--"}
+                    </strong>
+                    <span className="text-[9px] text-slate-500 block">
+                      {selectedDay.male.sleepLog
+                        ? `${selectedDay.male.sleepLog.bedTime}-${selectedDay.male.sleepLog.wakeTime}`
+                        : "ยังไม่จด"}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Male Meals List */}
@@ -1333,28 +1514,44 @@ export function CalendarView({
 
             {(detailTab === "both" || detailTab === "female") && (
               <div className="space-y-2 p-3 rounded-xl bg-[#20101b] border border-pink-500/30">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-1">
                   <div className="flex items-center gap-1.5 font-bold text-pink-400 text-sm">
                     <span>🧘‍♀️</span>
                     <span>ฝ่ายหญิง: {selectedDay.female.statusLabel}</span>
                   </div>
-                  {onOpenAddMeal && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setDayModalOpen(false)
-                        onOpenAddMeal(selectedDay.dateStr, "ฝ่ายหญิง")
-                      }}
-                      className="h-6 text-[11px] border-pink-500/40 text-pink-300 hover:bg-pink-600 hover:text-white px-2"
-                    >
-                      <Plus className="h-3 w-3 mr-1" />
-                      เพิ่มอาหารหญิง
-                    </Button>
-                  )}
+                  <div className="flex items-center gap-1.5">
+                    {onOpenAddSleep && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setDayModalOpen(false)
+                          onOpenAddSleep(selectedDay.dateStr, "ฝ่ายหญิง")
+                        }}
+                        className="h-6 text-[11px] border-sky-500/40 text-sky-300 hover:bg-sky-600 hover:text-white px-2"
+                      >
+                        <Moon className="h-3 w-3 mr-1" />
+                        เวลานอนหญิง
+                      </Button>
+                    )}
+                    {onOpenAddMeal && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setDayModalOpen(false)
+                          onOpenAddMeal(selectedDay.dateStr, "ฝ่ายหญิง")
+                        }}
+                        className="h-6 text-[11px] border-pink-500/40 text-pink-300 hover:bg-pink-600 hover:text-white px-2"
+                      >
+                        <Plus className="h-3 w-3 mr-1" />
+                        เพิ่มอาหารหญิง
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-4 gap-2 text-center font-mono text-xs">
+                <div className="grid grid-cols-5 gap-2 text-center font-mono text-xs">
                   <div className="p-2 rounded-lg bg-[#0b0f19] border border-[#26334d]">
                     <span className="text-[10px] text-slate-400 block font-sans">แคลอรี่</span>
                     <strong className={selectedDay.female.calorieDiff >= 0 ? "text-emerald-400" : "text-rose-400"}>
@@ -1376,6 +1573,22 @@ export function CalendarView({
                     <span className="text-[10px] text-slate-400 block font-sans">น้ำหนักเช้า</span>
                     <strong className="text-cyan-300">{selectedDay.female.weight ? `${selectedDay.female.weight} kg` : "--"}</strong>
                     <span className="text-[9px] text-slate-500 block">ชั่งเช้า</span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-[#0b0f19] border border-[#26334d]">
+                    <span className="text-[10px] text-slate-400 block font-sans">เวลานอน</span>
+                    <strong className="text-sky-300">
+                      {selectedDay.female.sleepLog
+                        ? calculateSleepDuration(
+                            selectedDay.female.sleepLog.bedTime,
+                            selectedDay.female.sleepLog.wakeTime
+                          ).shortFormatted
+                        : "--"}
+                    </strong>
+                    <span className="text-[9px] text-slate-500 block">
+                      {selectedDay.female.sleepLog
+                        ? `${selectedDay.female.sleepLog.bedTime}-${selectedDay.female.sleepLog.wakeTime}`
+                        : "ยังไม่จด"}
+                    </span>
                   </div>
                 </div>
 

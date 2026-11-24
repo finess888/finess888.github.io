@@ -27,6 +27,7 @@ import {
   saveDailyStepLog,
   calculateWorkoutStats,
 } from "@/lib/exerciseDatabase"
+import { getSleepLogs, calculateSleepRoutineStats } from "@/lib/sleepTracker"
 import { getCalorieSettings, saveCalorieSettings } from "@/lib/calorieSettings"
 import { AddStepModal } from "@/components/modals/AddStepModal"
 import { EditProjectModal } from "@/components/modals/EditProjectModal"
@@ -51,6 +52,7 @@ import {
   Edit3,
   Check,
   Settings2,
+  Moon,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -693,6 +695,61 @@ export function ProjectReviewModal({
                   </div>
                 </div>
               </div>
+
+              {/* Question 5: รูทีนการนอน & ระดับพลังงานในโปรเจกต์นี้ */}
+              {(() => {
+                const todayStr = new Date().toLocaleDateString("en-CA")
+                const effectiveEndDate = currentProject.completedAt
+                  ? currentProject.completedAt.split("T")[0]
+                  : todayStr < currentProject.deadlineDate
+                  ? todayStr
+                  : currentProject.deadlineDate
+                const sleepStats = calculateSleepRoutineStats(getSleepLogs(), {
+                  person:
+                    currentProject.person === "ทั้งคู่" ? "ALL" : currentProject.person,
+                  startDate: currentProject.startDate,
+                  endDate: effectiveEndDate,
+                })
+                return (
+                  <div className="sm:col-span-2 p-3.5 rounded-xl bg-[#0b0f19] border border-sky-500/30 space-y-1.5">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                        <Moon className="h-4 w-4 text-sky-400" />
+                        5. รูทีนการนอน & การฟื้นฟูพลังงาน (Sleep & Recovery Routine)
+                      </span>
+                      <Badge className="bg-sky-500/20 text-sky-300 border-sky-500/30 text-[10px]">
+                        {sleepStats.totalLogs > 0
+                          ? `⚡ พลังงานเฉลี่ย ${sleepStats.avgEnergyScore}/100`
+                          : "ยังไม่มีบันทึกเวลานอนในโปรเจกต์"}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
+                      <div className="p-2 rounded-lg bg-[#111726] border border-[#26334d]">
+                        <span className="text-[10px] text-slate-400 block">เวลานอนเฉลี่ย</span>
+                        <strong className="text-white font-mono">{sleepStats.avgFormatted}</strong>
+                      </div>
+                      <div className="p-2 rounded-lg bg-[#111726] border border-[#26334d]">
+                        <span className="text-[10px] text-slate-400 block">เข้านอน - ตื่นเฉลี่ย</span>
+                        <strong className="text-sky-300 font-mono">
+                          {sleepStats.avgBedTime} - {sleepStats.avgWakeTime}
+                        </strong>
+                      </div>
+                      <div className="p-2 rounded-lg bg-[#111726] border border-[#26334d]">
+                        <span className="text-[10px] text-slate-400 block">คืนที่นอนครบเป้า</span>
+                        <strong className="text-emerald-400 font-mono">
+                          {sleepStats.goalMetDays}/{sleepStats.totalLogs} คืน ({sleepStats.goalMetPct}%)
+                        </strong>
+                      </div>
+                      <div className="p-2 rounded-lg bg-[#111726] border border-[#26334d]">
+                        <span className="text-[10px] text-slate-400 block">นอนดึก / นอนน้อย</span>
+                        <strong className="text-rose-400 font-mono">
+                          ดึก {sleepStats.lateNightDays} • น้อย {sleepStats.shortSleepDays} คืน
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
 
             {/* AI Insights & Learnings for Next Project (โปรเจกต์เดดไลน์ต่อไปจะได้ปรับตัวได้ถูก) */}

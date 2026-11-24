@@ -139,6 +139,10 @@ function doPost(e) {
         result = handleAddWorkoutLog(ss, payload);
         break;
       }
+      case 'ADD_SLEEP_LOG': {
+        result = handleAddSleepLog(ss, payload);
+        break;
+      }
       case 'SAVE_CALORIE_SETTINGS': {
         result = handleSaveCalorieSettings(ss, payload);
         break;
@@ -154,6 +158,11 @@ function doPost(e) {
       }
       case 'SAVE_STEP_LOGS': {
         PropertiesService.getScriptProperties().setProperty('STEP_LOGS', JSON.stringify(payload));
+        result = { success: true };
+        break;
+      }
+      case 'SAVE_SLEEP_LOGS': {
+        PropertiesService.getScriptProperties().setProperty('SLEEP_LOGS', JSON.stringify(payload));
         result = { success: true };
         break;
       }
@@ -314,6 +323,15 @@ function handleGetInitialData(ss) {
     } catch (e) {}
   }
 
+  // 8. Sleep logs
+  let sleepLogs = null;
+  const rawSleep = PropertiesService.getScriptProperties().getProperty('SLEEP_LOGS');
+  if (rawSleep) {
+    try {
+      sleepLogs = JSON.parse(rawSleep);
+    } catch (e) {}
+  }
+
   return {
     spreadsheetName: ss.getName(),
     foods: foods,
@@ -324,6 +342,7 @@ function handleGetInitialData(ss) {
     projects: projects,
     workoutLogs: workoutLogs || [],
     stepLogs: stepLogs || [],
+    sleepLogs: sleepLogs || [],
     targets: {
       male: {
         calories: calorieSettings.male.maintenance,
@@ -652,6 +671,64 @@ function handleAddWorkoutLog(ss, payload) {
     rowValues[20] = workoutSummary;
     logSheet.getRange(targetRow, 1, 1, 21).setValues([rowValues]);
     return { success: true, newRow: targetRow, date: dateStr, person, workoutSummary };
+  }
+}
+
+function handleAddSleepLog(ss, payload) {
+  const logSheet = ss.getSheetByName(SHEET_DAILY_LOG) || ss.getSheets()[1];
+  const lastRow = logSheet.getLastRow();
+  const dateStr = payload.date ? String(payload.date).split('T')[0] : Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd');
+  const person = String(payload.person || 'ฝ่ายชาย').trim();
+  const bedTime = String(payload.bedTime || '23:00').trim();
+  const wakeTime = String(payload.wakeTime || '07:00').trim();
+  const formattedDuration = String(payload.formattedDuration || (payload.durationHours + ' ชม.')).trim();
+  const quality = String(payload.quality || '').trim();
+  const notes = String(payload.notes || '').trim();
+
+  let sleepSummary = `[${person}] 😴 นอน ${bedTime} - ตื่น ${wakeTime} (${formattedDuration})`;
+  if (quality) {
+    sleepSummary += ` | ${quality}`;
+  }
+  if (notes) {
+    sleepSummary += ` - ${notes}`;
+  }
+
+  // Scan Column L (12 in 1-based) for the matching date
+  let matchedRow = -1;
+  if (lastRow >= 4) {
+    const datesCol = logSheet.getRange(4, 12, lastRow - 3, 1).getValues();
+    for (let i = 0; i < datesCol.length; i++) {
+      let d = datesCol[i][0];
+      let rowDateStr = '';
+      if (d instanceof Date) {
+        rowDateStr = Utilities.formatDate(d, 'Asia/Bangkok', 'yyyy-MM-dd');
+      } else if (d) {
+        rowDateStr = String(d).split('T')[0];
+      }
+      if (rowDateStr === dateStr) {
+        matchedRow = i + 4;
+        break;
+      }
+    }
+  }
+
+  if (matchedRow > 0) {
+    const currentNotes = logSheet.getRange(matchedRow, 21).getValue();
+    const newNotes = currentNotes ? currentNotes + '\n' + sleepSummary : sleepSummary;
+    logSheet.getRange(matchedRow, 21).setValue(newNotes);
+    return { success: true, updatedRow: matchedRow, date: dateStr, person, sleepSummary };
+  } else {
+    const targetRow = lastRow + 1;
+    const dateVal = new Date(dateStr);
+    const dayNames = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+    const dayName = dayNames[dateVal.getDay()] || 'จันทร์';
+    const rowValues = new Array(21).fill('');
+    rowValues[11] = dateVal;
+    rowValues[12] = dayName;
+    rowValues[13] = 'วันปกติ';
+    rowValues[20] = sleepSummary;
+    logSheet.getRange(targetRow, 1, 1, 21).setValues([rowValues]);
+    return { success: true, newRow: targetRow, date: dateStr, person, sleepSummary };
   }
 }
 

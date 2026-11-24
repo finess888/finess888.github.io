@@ -14,6 +14,7 @@ import { FoodDatabaseView } from "@/components/views/FoodDatabaseView"
 import { WeightTrackerView } from "@/components/views/WeightTrackerView"
 import { ExerciseDatabaseView } from "@/components/views/ExerciseDatabaseView"
 import { WorkoutTrackerView } from "@/components/views/WorkoutTrackerView"
+import { SleepTrackerView } from "@/components/views/SleepTrackerView"
 import { SheetSyncView } from "@/components/views/SheetSyncView"
 import { SettingsView } from "@/components/views/SettingsView"
 import { AddMealModal } from "@/components/modals/AddMealModal"
@@ -21,7 +22,9 @@ import { AddFoodModal } from "@/components/modals/AddFoodModal"
 import { AddWeightModal } from "@/components/modals/AddWeightModal"
 import { AddWorkoutModal } from "@/components/modals/AddWorkoutModal"
 import { AddStepModal } from "@/components/modals/AddStepModal"
+import { AddSleepModal } from "@/components/modals/AddSleepModal"
 import { ExerciseItem, saveAllWorkoutLogs, saveAllStepLogs } from "@/lib/exerciseDatabase"
+import { saveAllSleepLogs } from "@/lib/sleepTracker"
 import { saveCalorieSettings } from "@/lib/calorieSettings"
 import { saveProjects } from "@/lib/projectManager"
 import { Button } from "@/components/ui/button"
@@ -34,6 +37,7 @@ import {
   Scale,
   Dumbbell,
   Activity,
+  Moon,
   FileSpreadsheet,
   Settings,
   Menu,
@@ -52,6 +56,7 @@ type ViewKey =
   | "weight"
   | "exercisedb"
   | "workout"
+  | "sleep"
   | "sheetsync"
   | "settings"
 
@@ -89,9 +94,12 @@ export default function App() {
   const [addWeightOpen, setAddWeightOpen] = React.useState(false)
   const [addWorkoutOpen, setAddWorkoutOpen] = React.useState(false)
   const [addStepOpen, setAddStepOpen] = React.useState(false)
+  const [addSleepOpen, setAddSleepOpen] = React.useState(false)
   const [selectedExerciseForLog, setSelectedExerciseForLog] = React.useState<ExerciseItem | null>(null)
   const [selectedFoodForMeal, setSelectedFoodForMeal] = React.useState<any>(null)
   const [selectedDateForMeal, setSelectedDateForMeal] = React.useState<string>("")
+  const [selectedDateForSleep, setSelectedDateForSleep] = React.useState<string>("")
+  const [selectedPersonForSleep, setSelectedPersonForSleep] = React.useState<string>("")
 
   // Auto-check for new deployed web bundle on tab focus & interval
   React.useEffect(() => {
@@ -151,6 +159,7 @@ export default function App() {
         projects?: any[]
         workoutLogs?: any[]
         stepLogs?: any[]
+        sleepLogs?: any[]
       }>("GET_INITIAL_DATA")
 
       // Sync cloud settings, projects, and workouts across all devices
@@ -165,6 +174,9 @@ export default function App() {
       }
       if (data?.stepLogs && Array.isArray(data.stepLogs)) {
         saveAllStepLogs(data.stepLogs)
+      }
+      if (data?.sleepLogs && Array.isArray(data.sleepLogs)) {
+        saveAllSleepLogs(data.sleepLogs)
       }
       if (data?.foods && Array.isArray(data.foods) && data.foods.length > 0) {
         saveCachedFoods(data.foods)
@@ -290,6 +302,12 @@ export default function App() {
       key: "workout",
       label: "บันทึกออกกำลังกาย / ก้าว",
       icon: <Activity className="h-4 w-4" />,
+    },
+    {
+      key: "sleep",
+      label: "บันทึกเวลานอน / ตื่น",
+      icon: <Moon className="h-4 w-4 text-sky-400" />,
+      badge: "ใหม่",
     },
     {
       key: "sheetsync",
@@ -494,9 +512,15 @@ export default function App() {
               }}
               onOpenAddWeight={() => setAddWeightOpen(true)}
               onOpenAddStep={() => setAddStepOpen(true)}
+              onOpenAddSleep={(date, person) => {
+                setSelectedDateForSleep(date || "")
+                setSelectedPersonForSleep(person || "")
+                setAddSleepOpen(true)
+              }}
               onToggleMealStatus={handleToggleMealStatus}
               onNavigateToMealPlan={() => setCurrentView("mealplan")}
               onNavigateToCalendar={() => setCurrentView("calendar")}
+              onNavigateToSleep={() => setCurrentView("sleep")}
             />
           )}
 
@@ -515,6 +539,11 @@ export default function App() {
               }}
               onOpenAddStep={() => setAddStepOpen(true)}
               onOpenAddWeight={() => setAddWeightOpen(true)}
+              onOpenAddSleep={(date, person) => {
+                setSelectedDateForSleep(date || "")
+                setSelectedPersonForSleep(person || "")
+                setAddSleepOpen(true)
+              }}
             />
           )}
 
@@ -568,6 +597,19 @@ export default function App() {
                 setAddWorkoutOpen(true)
               }}
               onOpenAddStep={() => setAddStepOpen(true)}
+            />
+          )}
+
+          {currentView === "sleep" && (
+            <SleepTrackerView
+              selectedPerson={selectedPerson}
+              onSelectPerson={setSelectedPerson}
+              meals={meals}
+              onOpenAddSleep={(date, person) => {
+                setSelectedDateForSleep(date || "")
+                setSelectedPersonForSleep(person || "")
+                setAddSleepOpen(true)
+              }}
             />
           )}
 
@@ -689,6 +731,22 @@ export default function App() {
         open={addStepOpen}
         onOpenChange={setAddStepOpen}
         defaultPerson={selectedPerson === "ALL" ? "ฝ่ายชาย" : selectedPerson}
+        onSaved={() => refetch()}
+      />
+
+      <AddSleepModal
+        open={addSleepOpen}
+        onOpenChange={(isOpen) => {
+          setAddSleepOpen(isOpen)
+          if (!isOpen) {
+            setSelectedDateForSleep("")
+            setSelectedPersonForSleep("")
+          }
+        }}
+        defaultPerson={
+          selectedPersonForSleep || (selectedPerson === "ALL" ? "ฝ่ายชาย" : selectedPerson)
+        }
+        initialDate={selectedDateForSleep}
         onSaved={() => refetch()}
       />
     </div>
