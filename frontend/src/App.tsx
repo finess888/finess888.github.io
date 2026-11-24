@@ -391,7 +391,7 @@ export default function App() {
             className="h-8 px-3 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-medium flex items-center gap-1"
           >
             <Plus className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">บันทึกมื้อ</span>
+            <span className="hidden sm:inline">กรอกข้อมูล</span>
           </Button>
 
           <Button
