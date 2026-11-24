@@ -717,6 +717,225 @@ export function DashboardView({
     [activeSleepGoal]
   )
 
+  // Routine Score Trend Bar Chart (7 / 14 / 30 days) placed below Calorie & Sleep Trend Cards
+  const [routineDaysRange, setRoutineDaysRange] = React.useState<7 | 14 | 30>(30)
+  const ROUTINE_TARGET_SCORE = 80
+  const allStepsForRoutineChart = getDailyStepLogs()
+
+  const routineChartDates: string[] = []
+  const routineChartLabels: string[] = []
+  for (let i = routineDaysRange - 1; i >= 0; i--) {
+    const d = new Date()
+    d.setDate(d.getDate() - i)
+    const iso = d.toLocaleDateString("en-CA")
+    routineChartDates.push(iso)
+    routineChartLabels.push(`${d.getDate()}/${d.getMonth() + 1}`)
+  }
+
+  const computeDailyPersonRoutine = (personKey: "ฝ่ายชาย" | "ฝ่ายหญิง", isoDate: string) => {
+    const isF = personKey === "ฝ่ายหญิง"
+    const pTargetCal = isF ? femaleTargetIntake : maleTargetIntake
+    const pMaintCal = isF ? femaleMaintenance : maleMaintenance
+    const pTargetProt = isF ? femaleTargetProtein : maleTargetProtein
+    const pStepGoal = isF ? (femaleSettings.stepGoal || 8000) : (maleSettings.stepGoal || 8000)
+    const pSleepGoal = getSleepGoal(personKey) || 8
+
+    const dayMeals = meals.filter((m) => {
+      const p = String(m.person || m.Person || "").trim()
+      const d = String(m.date || m.Date || "").split("T")[0]
+      return d === isoDate && (p === personKey || p === "ทั้งคู่")
+    })
+    const cals = dayMeals.reduce((s, m) => s + Number(m.calories || m.Calories || 0), 0)
+    const prot = dayMeals.reduce((s, m) => s + Number(m.protein || m.Protein || 0), 0)
+
+    const stepEntry = allStepsForRoutineChart.find(
+      (s) => s.date === isoDate && s.person === personKey
+    )
+    const steps = stepEntry ? Number(stepEntry.steps || 0) : 0
+
+    const sleepEntry = allSleepLogsForChart.find(
+      (s) => s.date === isoDate && s.person === personKey
+    )
+
+    const hasAnyLog = dayMeals.length > 0 || steps > 0 || !!sleepEntry
+    if (!hasAnyLog) {
+      return { total: 0, sleepScore: 0, calScore: 0, protScore: 0, stepScore: 0, hasAnyLog: false }
+    }
+
+    // 1. Sleep (25 pts)
+    const sleepScore = sleepEntry
+      ? Math.round(
+          (evaluateSleepStatus(
+            sleepEntry.durationHours,
+            sleepEntry.sleepGoalHours || pSleepGoal,
+            sleepEntry.bedTime,
+            sleepEntry.quality
+          ).energyScore /
+            100) *
+            25
+        )
+      : 0
+
+    // 2. Calorie Control (30 pts)
+    let calScore = 0
+    if (cals > 0) {
+      if (cals <= pTargetCal) calScore = 30
+      else if (cals <= pMaintCal) calScore = 18
+      else calScore = 5
+    }
+
+    // 3. Protein (25 pts)
+    const protPct = Math.min(1, prot / Math.max(1, pTargetProt))
+    const protScore = Math.round(protPct * 25)
+
+    // 4. Steps (20 pts)
+    const stepPct = Math.min(1, steps / Math.max(1, pStepGoal))
+    const stepScore = Math.round(stepPct * 20)
+
+    const total = Math.min(100, sleepScore + calScore + protScore + stepScore)
+    return { total, sleepScore, calScore, protScore, stepScore, hasAnyLog: true }
+  }
+
+  const maleRoutineBreakdownByDate = routineChartDates.map((isoDate) =>
+    computeDailyPersonRoutine("ฝ่ายชาย", isoDate)
+  )
+  const femaleRoutineBreakdownByDate = routineChartDates.map((isoDate) =>
+    computeDailyPersonRoutine("ฝ่ายหญิง", isoDate)
+  )
+
+  const weeklyMaleRoutineScores = maleRoutineBreakdownByDate.map((b) => b.total)
+  const weeklyFemaleRoutineScores = femaleRoutineBreakdownByDate.map((b) => b.total)
+
+  const activeRoutineSeries = isAll
+    ? weeklyMaleRoutineScores.map((m, idx) => {
+        const f = weeklyFemaleRoutineScores[idx]
+        if (m > 0 && f > 0) return Math.round((m + f) / 2)
+        return m > 0 ? m : f
+      })
+    : isMale
+    ? weeklyMaleRoutineScores
+    : weeklyFemaleRoutineScores
+
+  const routineLoggedValues = activeRoutineSeries.filter((sc) => sc > 0)
+  const lastRoutineLoggedDays = routineLoggedValues.length
+  const lastRoutineOnTargetDays = routineLoggedValues.filter(
+    (sc) => sc >= ROUTINE_TARGET_SCORE
+  ).length
+  const lastRoutineAdherencePct =
+    lastRoutineLoggedDays > 0
+      ? Math.round((lastRoutineOnTargetDays / lastRoutineLoggedDays) * 100)
+      : 0
+  const avgRoutineScoreInRange =
+    lastRoutineLoggedDays > 0
+      ? Math.round(
+          routineLoggedValues.reduce((sum, sc) => sum + sc, 0) /
+            lastRoutineLoggedDays
+        )
+      : 0
+
+  const getRoutineBarColors = (values: number[]) => {
+    const bg: string[] = []
+    const border: string[] = []
+    values.forEach((sc) => {
+      if (sc >= ROUTINE_TARGET_SCORE) {
+        bg.push("rgba(16, 185, 129, 0.85)") // Green: >= 80
+        border.push("#10b981")
+      } else if (sc >= 55) {
+        bg.push("rgba(245, 158, 11, 0.85)") // Yellow: 55 - 79
+        border.push("#f59e0b")
+      } else {
+        bg.push("rgba(244, 63, 94, 0.82)") // Red: < 55
+        border.push("#f43f5e")
+      }
+    })
+    return { bg, border }
+  }
+
+  const singleRoutineValues = isMale
+    ? weeklyMaleRoutineScores
+    : weeklyFemaleRoutineScores
+  const singleRoutineBarColors = getRoutineBarColors(singleRoutineValues)
+
+  const routineBarData = isAll
+    ? {
+        labels: routineChartLabels,
+        datasets: [
+          {
+            label: "ฝ่ายชาย (คะแนน)",
+            data: weeklyMaleRoutineScores,
+            backgroundColor: "rgba(16, 185, 129, 0.75)",
+            borderColor: "#10b981",
+            borderRadius: 6,
+          },
+          {
+            label: "ฝ่ายหญิง (คะแนน)",
+            data: weeklyFemaleRoutineScores,
+            backgroundColor: "rgba(236, 72, 153, 0.75)",
+            borderColor: "#ec4899",
+            borderRadius: 6,
+          },
+        ],
+      }
+    : {
+        labels: routineChartLabels,
+        datasets: [
+          {
+            label: "คะแนนรูทีน (เต็ม 100)",
+            data: singleRoutineValues,
+            backgroundColor: singleRoutineBarColors.bg,
+            borderColor: singleRoutineBarColors.border,
+            borderWidth: 1,
+            borderRadius: 6,
+          },
+        ],
+      }
+
+  const routineTargetLinePlugin = React.useMemo(
+    () => ({
+      id: "targetRoutineLine",
+      afterDatasetsDraw(chart: any) {
+        const { ctx, chartArea, scales } = chart
+        if (!chartArea || !scales?.y) return
+        const yPos = scales.y.getPixelForValue(ROUTINE_TARGET_SCORE)
+        if (yPos < chartArea.top || yPos > chartArea.bottom) return
+
+        ctx.save()
+        ctx.beginPath()
+        ctx.setLineDash([6, 4])
+        ctx.lineWidth = 2
+        ctx.strokeStyle = "#38bdf8"
+        ctx.moveTo(chartArea.left, yPos)
+        ctx.lineTo(chartArea.right, yPos)
+        ctx.stroke()
+
+        const labelText = `เป้า ${ROUTINE_TARGET_SCORE} คะแนน`
+        ctx.font = "600 11px sans-serif"
+        const textWidth = ctx.measureText(labelText).width
+        const padX = 6
+        const boxW = textWidth + padX * 2
+        const boxH = 18
+        const boxX = chartArea.right - boxW - 4
+        const boxY = Math.max(chartArea.top + 2, yPos - boxH - 4)
+
+        ctx.setLineDash([])
+        ctx.fillStyle = "rgba(15, 23, 42, 0.88)"
+        ctx.strokeStyle = "rgba(56, 189, 248, 0.6)"
+        ctx.lineWidth = 1
+        ctx.beginPath()
+        ctx.roundRect(boxX, boxY, boxW, boxH, 4)
+        ctx.fill()
+        ctx.stroke()
+
+        ctx.fillStyle = "#7dd3fc"
+        ctx.textAlign = "center"
+        ctx.textBaseline = "middle"
+        ctx.fillText(labelText, boxX + boxW / 2, boxY + boxH / 2)
+        ctx.restore()
+      },
+    }),
+    []
+  )
+
   return (
     <div className="space-y-6">
       {/* Top Banner & Action Buttons */}
@@ -2281,6 +2500,102 @@ export function DashboardView({
           </CardContent>
         </Card>
       </div>
+
+      {/* Bottom Full-Width Card: 30-Day Routine & Energy Score Trend Chart */}
+      <Card className="bg-[#151d2f] border-[#26334d]">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <CardTitle className="text-base font-semibold text-white flex items-center gap-2 flex-wrap">
+              <Zap className="h-4 w-4 text-amber-400" />
+              <span>คะแนนรูทีน {routineDaysRange} วันล่าสุด ({selectedPerson})</span>
+              <Badge
+                variant="outline"
+                className={
+                  lastRoutineAdherencePct >= 70
+                    ? "border-emerald-500/40 text-emerald-300 bg-emerald-500/15"
+                    : lastRoutineAdherencePct >= 40
+                    ? "border-amber-500/40 text-amber-300 bg-amber-500/15"
+                    : "border-rose-500/40 text-rose-300 bg-rose-500/15"
+                }
+              >
+                ทำตามเป้า {lastRoutineAdherencePct}% ({lastRoutineOnTargetDays}/{lastRoutineLoggedDays} วัน)
+              </Badge>
+            </CardTitle>
+            <CardDescription className="text-slate-400 text-xs mt-0.5">
+              แนวโน้มคะแนนรูทีน 4 เสาหลัก (การนอน 25 • แคลอรี่ 30 • โปรตีน 25 • ก้าวเดิน 20) เปรียบเทียบเป้าหมาย {ROUTINE_TARGET_SCORE}/100 คะแนน (สีเขียว ≥ {ROUTINE_TARGET_SCORE} • เหลือง 55-79 • แดง &lt; 55)
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Timeframe Switcher */}
+            <div className="flex items-center gap-1 bg-[#0b0f19] p-1 rounded-lg border border-[#26334d]">
+              {([7, 14, 30] as const).map((days) => (
+                <button
+                  key={days}
+                  type="button"
+                  onClick={() => setRoutineDaysRange(days)}
+                  className={`px-2 py-0.5 rounded text-[11px] font-medium transition-all ${
+                    routineDaysRange === days
+                      ? "bg-emerald-600 text-white font-semibold"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  {days} วัน
+                </button>
+              ))}
+            </div>
+            <Badge variant="outline" className="border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
+              คะแนนเฉลี่ย: {avgRoutineScoreInRange} / 100 (เป้า {ROUTINE_TARGET_SCORE} คะแนน)
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="h-64 pt-2">
+          <Bar
+            key={`routine-${selectedPerson}-${routineDaysRange}`}
+            data={routineBarData}
+            plugins={[routineTargetLinePlugin]}
+            options={{
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: {
+                y: {
+                  beginAtZero: true,
+                  max: 100,
+                  grid: { color: "rgba(255, 255, 255, 0.05)" },
+                  ticks: { color: "#94a3b8" },
+                },
+                x: {
+                  grid: { display: false },
+                  ticks: { color: "#94a3b8", font: { size: 10 }, maxRotation: 45, autoSkip: true },
+                },
+              },
+              plugins: {
+                legend: {
+                  display: isAll,
+                  labels: { color: "#94a3b8", font: { size: 11 } },
+                },
+                tooltip: {
+                  callbacks: {
+                    afterLabel(context: any) {
+                      const idx = context.dataIndex
+                      const b = isAll
+                        ? context.datasetIndex === 0
+                          ? maleRoutineBreakdownByDate[idx]
+                          : femaleRoutineBreakdownByDate[idx]
+                        : isMale
+                        ? maleRoutineBreakdownByDate[idx]
+                        : femaleRoutineBreakdownByDate[idx]
+                      if (b && b.hasAnyLog) {
+                        return `การนอน ${b.sleepScore}/25 • แคลอรี่ ${b.calScore}/30 • โปรตีน ${b.protScore}/25 • ก้าวเดิน ${b.stepScore}/20`
+                      }
+                      return ""
+                    },
+                  },
+                },
+              },
+            }}
+          />
+        </CardContent>
+      </Card>
 
       {/* Active Date Meals Timeline */}
       <Card className="bg-[#151d2f] border-[#26334d]">
