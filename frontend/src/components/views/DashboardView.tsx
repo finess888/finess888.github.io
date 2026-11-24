@@ -1024,7 +1024,10 @@ export function DashboardView({
       </div>
 
       {/* 📅 Date Navigator Bar + 4 Unified Action Buttons Underneath */}
-      <div className="bg-[#111726] border border-[#26334d] p-3.5 rounded-2xl shadow-lg space-y-3">
+      <div
+        id="daily-record-actions"
+        className="bg-[#111726] border border-[#26334d] p-3.5 rounded-2xl shadow-lg space-y-3 transition-all duration-500 scroll-mt-20"
+      >
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2 flex-wrap">
             <Button

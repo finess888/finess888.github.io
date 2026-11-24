@@ -242,6 +242,23 @@ export default function App() {
     setAddMealOpen(true)
   }
 
+  // Scroll to the 4 daily recording buttons in DashboardView
+  const handleScrollToRecordButtons = () => {
+    if (currentView !== "dashboard") {
+      setCurrentView("dashboard")
+    }
+    setTimeout(() => {
+      const el = document.getElementById("daily-record-actions")
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" })
+        el.classList.add("ring-2", "ring-emerald-400", "shadow-emerald-950/60")
+        setTimeout(() => {
+          el.classList.remove("ring-2", "ring-emerald-400", "shadow-emerald-950/60")
+        }, 1800)
+      }
+    }, 80)
+  }
+
   // Data from GAS (with local cache fallback for foods so search never disappears)
   const meals = initialData?.meals || []
   const foods =
@@ -370,10 +387,7 @@ export default function App() {
 
           <Button
             size="sm"
-            onClick={() => {
-              setSelectedFoodForMeal(null)
-              setAddMealOpen(true)
-            }}
+            onClick={handleScrollToRecordButtons}
             className="h-8 px-3 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-medium flex items-center gap-1"
           >
             <Plus className="h-3.5 w-3.5" />
