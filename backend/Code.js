@@ -115,6 +115,10 @@ function doPost(e) {
         result = handleDeleteMealsByDate(ss, payload);
         break;
       }
+      case 'REPLACE_ALL_MEALS': {
+        result = handleReplaceAllMeals(ss, payload);
+        break;
+      }
       case 'ADD_FOOD_ITEM': {
         result = handleAddFoodItem(ss, payload);
         break;
@@ -552,6 +556,44 @@ function handleDeleteMealsByDate(ss, payload) {
 function deleteMealsDate16() {
   const ss = getSpreadsheet();
   return handleDeleteMealsByDate(ss, { date: '2026-11-16' });
+}
+
+function handleReplaceAllMeals(ss, payload) {
+  const logSheet = ss.getSheetByName(SHEET_DAILY_LOG) || ss.getSheets()[1];
+  const lastRow = logSheet.getLastRow();
+  const meals = payload && payload.meals;
+  if (!Array.isArray(meals)) {
+    return { success: false, message: 'payload.meals must be an array' };
+  }
+
+  if (lastRow >= 4) {
+    logSheet.getRange(4, 1, lastRow - 3, 10).clearContent();
+  }
+
+  const rows = meals.map(m => {
+    const dateVal = m.date ? new Date(m.date) : new Date();
+    return [
+      dateVal,
+      String(m.person || 'ฝ่ายชาย').trim(),
+      String(m.mealType || '01. มื้อเช้า').trim(),
+      String(m.foodName || '-').trim(),
+      Number(m.servings || 1),
+      Number(m.calories || 0),
+      Number(m.protein || 0),
+      Number(m.carbs || 0),
+      Number(m.fat || 0),
+      String(m.notes || '').trim()
+    ];
+  });
+
+  if (rows.length > 0) {
+    logSheet.getRange(4, 1, rows.length, 10).setValues(rows);
+  }
+
+  return {
+    success: true,
+    totalMeals: rows.length
+  };
 }
 
 function handleAddWeightLog(ss, payload) {
